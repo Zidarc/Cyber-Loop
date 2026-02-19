@@ -1,14 +1,3 @@
-/**
- * Phase 2 — Database Seed Script
- *
- * Populates the database with initial game data per phase-2-database-design.md:
- * 1. Nodes (START, 1–17, P1–P7, FINAL)
- * 2. Node edges (directed graph)
- * 3. Placeholder questions (≥5 per normal/checkpoint/final, ≥7 per penalty)
- *
- * Participants and their progress are created via admin/registration API.
- */
-
 import path from 'path';
 import fs from 'fs';
 import Database from 'better-sqlite3';
