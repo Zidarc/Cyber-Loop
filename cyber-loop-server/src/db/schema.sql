@@ -59,13 +59,22 @@ CREATE TABLE IF NOT EXISTS question_attempts (
 
 CREATE TABLE IF NOT EXISTS participant_game_state (
   participant_id         INTEGER PRIMARY KEY REFERENCES participants(id),
+
   total_correct          INTEGER NOT NULL DEFAULT 0,
   total_mistakes         INTEGER NOT NULL DEFAULT 0,
   score                  INTEGER NOT NULL DEFAULT 0,
+
   last_checkpoint_id     INTEGER REFERENCES nodes(id),
+
+  current_node_id        INTEGER REFERENCES nodes(id),
+  current_question_id    INTEGER REFERENCES questions(id),
+
   last_question_id       INTEGER REFERENCES questions(id),
+
   penalty_nodes_unlocked INTEGER NOT NULL DEFAULT 0,
+
   is_finished            INTEGER NOT NULL DEFAULT 0,
+
   started_at             TEXT DEFAULT (datetime('now')),
   finished_at            TEXT,
   updated_at             TEXT DEFAULT (datetime('now'))

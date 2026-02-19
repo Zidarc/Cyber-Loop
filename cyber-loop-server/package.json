@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "npx tsx src/server.ts",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "db:seed": "npx tsx src/db/seed.ts"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

@@ -9,7 +9,7 @@ import gameRoutes from './routes/game.routes';
 import { db } from './config/db';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
 
 const uploadSubdirs = ['images', 'pdfs', 'text'];
@@ -38,6 +38,6 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server listening on port ${PORT}`);
 });
