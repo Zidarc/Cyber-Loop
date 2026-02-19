@@ -1,0 +1,6 @@
+node_modules/
+dist/
+#will store the questions and so on
+data/*.db 
+.env
+*.log
