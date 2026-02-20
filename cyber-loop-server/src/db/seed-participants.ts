@@ -2,7 +2,6 @@
  * Standalone script to seed participant (team) accounts.
  * Run after db/seed.ts (nodes, edges, questions).
  * Input: array of { username, password, team_name }
- * Idempotent: skips insert if username already exists.
  */
 
 import path from 'path';

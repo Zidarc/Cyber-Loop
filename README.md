@@ -54,7 +54,7 @@ npm run start
 ```
 
 The server should now be available at [http://localhost:3000](http://localhost:3000). If using a different machine, replace `localhost` with the machine's IP: `http://[IP_ADDRESS]:3000`.
-
+I have exposed the route to 0.0.0.0 which should allow all devices on the same internet to access it.
 ## 7. Health Check
 
 Visit the health endpoint to ensure the server is running:
