@@ -26,7 +26,7 @@ export async function verifyToken(
     const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
     const tokenHash = hashToken(token);
 
-    const row = authService.getParticipantById(payload.participantId);
+    const row = await authService.getParticipantById(payload.participantId);
     if (!row || row.is_active !== 1) {
       res.status(403).json({ error: 'Account disabled' });
       return;

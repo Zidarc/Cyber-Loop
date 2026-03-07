@@ -13,6 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.98.0",
     "bcrypt": "^5.1.1",
     "better-sqlite3": "^12.6.2",
     "cors": "^2.8.5",

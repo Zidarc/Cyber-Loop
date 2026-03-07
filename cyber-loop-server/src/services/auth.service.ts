@@ -1,9 +1,8 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { db } from '../config/db';
+import { supabase } from '../config/supabase';
 
-const BCRYPT_COST = 12;
 const JWT_SECRET = process.env.JWT_SECRET || 'Well ofc this isnt the key';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
 
@@ -30,21 +29,25 @@ export function hashToken(token: string): string {
 export const authService = {
   async login(username: string, password: string): Promise<{ token: string } | null> {
     const trimmed = String(username ?? '').trim();
-    const stmt = db.prepare(
-      'SELECT id, username, password_hash, team_name, is_active, active_token_hash FROM participants WHERE username = ?'
-    );
-    const row = stmt.get(trimmed) as ParticipantRow | undefined;
-    if (!row) return null;
 
-    if (row.is_active !== 1) return null;
+    const { data: row, error: selectError } = await supabase
+      .from('participants')
+      .select('id, username, password_hash, team_name, is_active, active_token_hash')
+      .eq('username', trimmed)
+      .maybeSingle();
 
-    const valid = await bcrypt.compare(password, row.password_hash);
+    if (selectError || !row) return null;
+
+    const participant = row as ParticipantRow;
+    if (participant.is_active !== 1) return null;
+
+    const valid = await bcrypt.compare(password, participant.password_hash);
     if (!valid) return null;
 
     const payload: JwtPayload & { loginId: string } = {
-      participantId: row.id,
-      username: row.username,
-      teamName: row.team_name,
+      participantId: participant.id,
+      username: participant.username,
+      teamName: participant.team_name,
       role: 'participant',
       loginId: crypto.randomUUID(),
     };
@@ -56,25 +59,47 @@ export const authService = {
     );
     const tokenHash = hashToken(token);
 
-    const updateStmt = db.prepare('UPDATE participants SET active_token_hash = ? WHERE id = ?');
-    updateStmt.run(tokenHash, row.id);
+    const { error: updateError } = await supabase
+      .from('participants')
+      .update({ active_token_hash: tokenHash })
+      .eq('id', participant.id);
+
+    if (updateError) return null;
 
     return { token };
   },
 
   async logout(participantId: number, token: string): Promise<boolean> {
     const tokenHash = hashToken(token);
-    const stmt = db.prepare('SELECT active_token_hash FROM participants WHERE id = ?');
-    const row = stmt.get(participantId) as { active_token_hash: string | null } | undefined;
-    if (!row || row.active_token_hash !== tokenHash) return false;
 
-    const clearStmt = db.prepare('UPDATE participants SET active_token_hash = NULL WHERE id = ?');
-    clearStmt.run(participantId);
-    return true;
+    const { data: row, error: selectError } = await supabase
+      .from('participants')
+      .select('active_token_hash')
+      .eq('id', participantId)
+      .maybeSingle();
+
+    if (selectError || !row) return false;
+    const stored = row as { active_token_hash: string | null };
+    if (stored.active_token_hash !== tokenHash) return false;
+
+    const { error: updateError } = await supabase
+      .from('participants')
+      .update({ active_token_hash: null })
+      .eq('id', participantId);
+
+    return !updateError;
   },
 
-  getParticipantById(id: number): { active_token_hash: string | null; is_active: number } | null {
-    const stmt = db.prepare('SELECT active_token_hash, is_active FROM participants WHERE id = ?');
-    return (stmt.get(id) as { active_token_hash: string | null; is_active: number } | undefined) ?? null;
+  async getParticipantById(
+    id: number
+  ): Promise<{ active_token_hash: string | null; is_active: number } | null> {
+    const { data: row, error } = await supabase
+      .from('participants')
+      .select('active_token_hash, is_active')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error || !row) return null;
+    return row as { active_token_hash: string | null; is_active: number };
   },
 };
