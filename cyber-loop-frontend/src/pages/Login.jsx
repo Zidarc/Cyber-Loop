@@ -76,13 +76,13 @@ function CinematicOverlay() {
 }
 
 /* ── Ember data — generated once, stable across renders ── */
-const EMBER_COUNT = 130
+const EMBER_COUNT = 150
 const embers = Array.from({ length: EMBER_COUNT }, (_, i) => {
   // Realistic small sizes — actual embers are tiny
-  const size  = 0.8 + (i % 9) * 0.35          // 0.8px – 3.6px
+  const size  = 1.5 + (i % 9) * 0.6           // 1.5px – 6.3px
   // Denser toward the bottom/sides where the lava is
   const left  = 1 + (i * 1.41) % 98
-  const bot   = (i * 4.7) % 35                 // mostly low on screen
+  const bot   = (i * 4.7) % 50                 // spread a bit higher
   // Gentle natural drift — not too wild
   const dx    = `${((i % 2 === 0 ? 1 : -1) * (4 + (i * 2.3) % 18)).toFixed(1)}px`
   const dy    = `-${(30 + (i * 7.1) % 55).toFixed(0)}vh`
@@ -91,16 +91,21 @@ const embers = Array.from({ length: EMBER_COUNT }, (_, i) => {
   const pd    = `${0.9 + (i * 0.21) % 1.6}s`
   const delay = `${(i * 0.13) % 5.5}s`
 
-  // Volcano-realistic palette — amber, orange, deep red, occasional bright spark
-  // weighted heavily toward orange/red to match the bg video
+  // Rich varied ember palette across the full fire spectrum
   const palettes = [
-    { c: '#FF5500', g: 'rgba(255,85,0,0.7)',   freq: 25 },  // bright orange
-    { c: '#FF3300', g: 'rgba(255,51,0,0.75)',  freq: 25 },  // deep orange-red
-    { c: '#CC2200', g: 'rgba(200,34,0,0.8)',   freq: 20 },  // dark red
-    { c: '#FF7700', g: 'rgba(255,119,0,0.6)',  freq: 15 },  // amber
-    { c: '#FF1100', g: 'rgba(255,17,0,0.85)',  freq: 10 },  // blood red
-    { c: '#FFAA44', g: 'rgba(255,170,68,0.55)',freq: 4  },  // warm amber
-    { c: '#FFEEBB', g: 'rgba(255,238,187,0.9)',freq: 1  },  // white-hot spark (rare)
+    { c: '#FF5500', g: 'rgba(255,85,0,0.7)',    freq: 14 },  // bright orange
+    { c: '#FF3300', g: 'rgba(255,51,0,0.75)',   freq: 13 },  // deep orange-red
+    { c: '#CC2200', g: 'rgba(200,34,0,0.8)',    freq: 12 },  // dark red
+    { c: '#FF7700', g: 'rgba(255,119,0,0.6)',   freq: 10 },  // amber
+    { c: '#FF1100', g: 'rgba(255,17,0,0.85)',   freq: 10 },  // blood red
+    { c: '#FF8800', g: 'rgba(255,136,0,0.65)',  freq: 9  },  // warm orange
+    { c: '#DD1100', g: 'rgba(221,17,0,0.8)',    freq: 8  },  // crimson
+    { c: '#FF4400', g: 'rgba(255,68,0,0.72)',   freq: 7  },  // fire orange
+    { c: '#AA1500', g: 'rgba(170,21,0,0.85)',   freq: 6  },  // deep crimson
+    { c: '#FFAA44', g: 'rgba(255,170,68,0.55)', freq: 5  },  // warm amber
+    { c: '#FF6600', g: 'rgba(255,102,0,0.68)',  freq: 4  },  // mid orange
+    { c: '#CC3300', g: 'rgba(204,51,0,0.78)',   freq: 1  },  // burnt red (rare)
+    { c: '#FFEEBB', g: 'rgba(255,238,187,0.9)', freq: 1  },  // white-hot (rare)
   ]
   // pick by weighted index
   let pick = i % 100
@@ -108,7 +113,7 @@ const embers = Array.from({ length: EMBER_COUNT }, (_, i) => {
   let acc = 0
   for (const p of palettes) { acc += p.freq; if (pick < acc) { palette = p; break } }
 
-  const glowSize = `${size * 2.8}px`
+  const glowSize = `${size * 3.5}px`
   return { size, left, bot, dx, dy, wx, dur, pd, delay, ...palette, glowSize }
 })
 
