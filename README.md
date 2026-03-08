@@ -4,6 +4,26 @@
 
 ---
 
+## Technical Stack & Libraries Installed
+
+### Server-Side (Backend)
+- **Framework**: Express.js
+- **Database**: SQLite (via `better-sqlite3`)
+- **Authentication**: JWT (`jsonwebtoken`)
+- **Security**: `helmet`, `cors`, `express-rate-limit`
+- **Password Hashing**: `bcrypt`
+- **Validation**: `express-validator`
+- **External Services**: Supabase (`@supabase/supabase-js`)
+- **Dev Tools**: TypeScript, Vitest, tsx
+
+### Client-Side (Frontend)
+- **Framework**: React 19 (via Vite)
+- **Routing**: React Router DOM (v7)
+- **Styling**: Tailwind CSS (v4)
+- **Dev Tools**: ESLint, Vite
+
+---
+
 ## Server Setup
 
 ### 1. Navigate to Server Folder
@@ -26,7 +46,7 @@ Copy the provided `.env.example` file to `.env` and fill in the values according
 cp .env.example .env
 ```
 
-### 4. Seed the Database
+### 4. Seed the Database (optional)
 
 ```bash
 npm run db:seed
@@ -87,7 +107,7 @@ Content-Type: application/json
 
 ```json
 {
-  "username": "team1",
+  "username": "testteam",
   "password": "password123"
 }
 ```
