@@ -10,15 +10,6 @@ import { db } from './config/db';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
-const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
-
-const uploadSubdirs = ['images', 'pdfs', 'text'];
-for (const sub of uploadSubdirs) {
-  const dir = path.join(UPLOAD_DIR, sub);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
 
 const schemaPath = path.join(process.cwd(), 'src', 'db', 'schema.sql');
 if (fs.existsSync(schemaPath)) {
