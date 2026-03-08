@@ -1,52 +1,53 @@
-# Cyber Loop Server Setup
+# Cyber Loop
 
-## 1. Navigate to Server Folder
+**Live Deployment:** [https://recursion-hell.vercel.app/](https://recursion-hell.vercel.app/)
+
+---
+
+## Server Setup
+
+### 1. Navigate to Server Folder
 
 ```bash
 cd cyber-loop-server
 ```
 
-## 2. Install Dependencies
+### 2. Install Dependencies
 
 ```bash
 npm install
 ```
 
-## 3. Create .env File
+### 3. Create .env File
 
-Create a `.env` file with the following format (only `JWT_SECRET` is mandatory, others have fallback values I believe so):
+Copy the provided `.env.example` file to `.env` and fill in the values according to your environment.
 
-```
-PORT=3000
-DB_FILE_PATH=./data/cyber_loop.db
-JWT_SECRET=examplekey
-JWT_EXPIRES_IN=8h
-UPLOAD_DIR=./uploads
-ALLOWED_ORIGINS=http://localhost:5173
+```bash
+cp .env.example .env
 ```
 
-## 4. Seed the Database
+### 4. Seed the Database
 
 ```bash
 npm run db:seed
 npm run db:seed-participants
 ```
 
-## 5. Run Tests
+### 5. Run Tests
 
 ```bash
 npm test
 ```
 
-## 6. Run the Server
+### 6. Run the Server
 
-### Development Mode
+#### Development Mode
 
 ```bash
 npm run dev
 ```
 
-### Production Mode
+#### Production Mode
 
 ```bash
 npm run build
@@ -55,7 +56,8 @@ npm run start
 
 The server should now be available at [http://localhost:3000](http://localhost:3000). If using a different machine, replace `localhost` with the machine's IP: `http://[IP_ADDRESS]:3000`.
 I have exposed the route to 0.0.0.0 which should allow all devices on the same internet to access it.
-## 7. Health Check
+
+### 7. Health Check
 
 Visit the health endpoint to ensure the server is running:
 
@@ -69,9 +71,9 @@ Expected Response:
 {"status":"ok"}
 ```
 
-## 8. Check Login Status Using Postman
+### 8. Check Login Status Using Postman
 
-### Test Login
+#### Test Login
 
 **Endpoint:** `POST http://[IP_ADDRESS]:3000/api/auth/login`
 
@@ -100,7 +102,7 @@ Content-Type: application/json
 
 Copy the JWT token for authenticated requests.
 
-### Test Logout
+#### Test Logout
 
 **Endpoint:** `POST http://[IP_ADDRESS]:3000/api/auth/logout`
 
@@ -121,3 +123,27 @@ Authorization: Bearer <JWT_TOKEN>
 ```
 
 After logout, the same token will be invalid for any protected routes.
+
+---
+
+## Frontend Setup
+
+### 1. Navigate to Frontend Folder
+
+```bash
+cd cyber-loop-frontend
+```
+
+### 2. Install Dependencies
+
+```bash
+npm install
+```
+
+### 3. Start the Development Server
+
+```bash
+npm run dev
+```
+
+The frontend should now be running. You can view the application in your browser, typically at [http://localhost:5173](http://localhost:5173).

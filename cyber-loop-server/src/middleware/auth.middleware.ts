@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { authService, hashToken } from '../services/auth.service';
 import type { JwtPayload } from '../services/auth.service';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || 'Well ofc this isnt the key';
 
 function extractBearerToken(authHeader: string | undefined): string | null {
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
@@ -26,7 +26,7 @@ export async function verifyToken(
     const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
     const tokenHash = hashToken(token);
 
-    const row = authService.getParticipantById(payload.participantId);
+    const row = await authService.getParticipantById(payload.participantId);
     if (!row || row.is_active !== 1) {
       res.status(403).json({ error: 'Account disabled' });
       return;
