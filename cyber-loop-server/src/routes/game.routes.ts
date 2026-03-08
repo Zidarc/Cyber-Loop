@@ -6,14 +6,20 @@ import {
   submitAnswer,
   getQuestionFile,
 } from '../controllers/game.controller';
+import {
+  handleValidation,
+  nodeQuestionValidation,
+  questionFileValidation,
+  gameAnswerValidation,
+} from '../middleware/validate';
 
 const router = Router();
 
 router.use(verifyToken);
 
 router.get('/state', getState);
-router.get('/node/:nodeId/question', getQuestion);
-router.get('/question/:questionId/file', getQuestionFile);
-router.post('/answer', submitAnswer);
+router.get('/node/:nodeId/question', nodeQuestionValidation, handleValidation, getQuestion);
+router.get('/question/:questionId/file', questionFileValidation, handleValidation, getQuestionFile);
+router.post('/answer', gameAnswerValidation, handleValidation, submitAnswer);
 
 export default router;
