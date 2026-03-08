@@ -131,9 +131,7 @@ function SceneCanvas({ active }) {
           e._ticks = 0
           continue
         }
-
-        // Move — mostly straight up, tiny sway
-        e.wobble += e.wobbleSpd
+                e.wobble += e.wobbleSpd
         e.x      += e.vx + Math.sin(e.wobble) * 0.10
         e.y      += e.vy
         e.dist   -= e.vy   // vy negative → dist grows
