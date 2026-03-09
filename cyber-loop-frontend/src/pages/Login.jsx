@@ -5,7 +5,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 /* ─────────────────────────────────────────
    CANVAS: vignette + lava glow + embers + spores + web
 ───────────────────────────────────────── */
-function SceneCanvas({ active }) {
+function SceneCanvas({ active, cardRef }) {
   const ref       = useRef(null)
   const activeRef = useRef(active)
   useEffect(() => { activeRef.current = active }, [active])
@@ -27,14 +27,28 @@ function SceneCanvas({ active }) {
       [255,120,0],[180,20,0],[220,60,0],[255,160,40],
     ]
 
+    function getCardRect() {
+      if (cardRef && cardRef.current) {
+        const r = cardRef.current.getBoundingClientRect()
+        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, h: r.height }
+      }
+      const W = canvas.width, H = canvas.height
+      return { left: W*0.5-200, right: W*0.5+200, top: H*0.1, bottom: H*0.9, h: H*0.8 }
+    }
+
     function spawnEmber(W, H) {
       const rgb  = PALETTE[Math.floor(Math.random()*PALETTE.length)]
       const size = 1.2 + Math.random()*2.8
-      const travel = H*(0.48+Math.random()*0.08)
+      const travel = H*(0.25+Math.random()*0.15)
+      const card = getCardRect()
+      // pick left or right side randomly
+      const side = Math.random() < 0.5 ? -1 : 1
+      const spawnX = side < 0 ? card.left : card.right
+      const spawnY = card.top + Math.random()*card.h
       return {
-        x:Math.random()*W, y:H, size,
-        vx:(Math.random()-0.5)*0.35,
-        vy:-(0.28+Math.random()*0.48),
+        x: spawnX, y: spawnY, size,
+        vx: side * (0.15 + Math.random()*0.35),  // shoot outward
+        vy: -(0.20+Math.random()*0.45),
         travel, dist:0, rgb,
         wobble:Math.random()*Math.PI*2,
         wobbleSpd:0.012+Math.random()*0.018,
@@ -99,28 +113,6 @@ function SceneCanvas({ active }) {
       vig.addColorStop(0.5,`rgba(0,0,0,${bv*0.28})`)
       vig.addColorStop(1,`rgba(0,0,0,${bv})`)
       ctx.fillStyle=vig; ctx.fillRect(0,0,W,H)
-
-      const g1=0.32+Math.sin(t*0.035)*0.10
-      const g2=0.18+Math.sin(t*0.080+1.1)*0.08
-      const g3=0.15+Math.sin(t*0.170+2.5)*0.06
-      const lg=ctx.createLinearGradient(0,H*0.62,0,H)
-      lg.addColorStop(0,'rgba(0,0,0,0)')
-      lg.addColorStop(0.45,`rgba(140,35,0,${g1*0.45})`)
-      lg.addColorStop(0.8,`rgba(210,60,0,${g1*0.72})`)
-      lg.addColorStop(1,`rgba(240,70,0,${g1})`)
-      ctx.fillStyle=lg; ctx.fillRect(0,H*0.62,W,H*0.38)
-      const hc=ctx.createRadialGradient(W*0.5,H,0,W*0.5,H,W*0.5)
-      hc.addColorStop(0,`rgba(255,100,0,${g2})`)
-      hc.addColorStop(0.35,`rgba(190,55,0,${g2*0.55})`)
-      hc.addColorStop(1,'rgba(0,0,0,0)')
-      ctx.fillStyle=hc; ctx.fillRect(0,H*0.6,W,H*0.4)
-      ;[0,W].forEach(cx=>{
-        const cg=ctx.createRadialGradient(cx,H,0,cx,H,W*0.28)
-        cg.addColorStop(0,`rgba(210,60,0,${g3*1.1})`)
-        cg.addColorStop(0.5,`rgba(150,35,0,${g3*0.45})`)
-        cg.addColorStop(1,'rgba(0,0,0,0)')
-        ctx.fillStyle=cg; ctx.fillRect(0,0,W,H)
-      })
 
       // Mind-Flayer web
       const WD=Math.min(W,H)*0.22
@@ -241,7 +233,7 @@ export default function Login(){
   const [error,setError]=useState('')
   const [loading,setLoading]=useState(false)
   const [shake,setShake]=useState(false)
-  const [videoReady,setVideoReady]=useState(false)
+  const cardRef=useRef(null)
 
   const canSubmit=useMemo(()=>teamName.trim().length>0&&password.trim().length>0&&!loading,[teamName,password,loading])
 
@@ -275,7 +267,7 @@ export default function Login(){
   }
 
   return (
-    <div style={{minHeight:'100vh',position:'relative',overflow:'hidden',display:'flex',alignItems:'center',justifyContent:'center',background:'#060100',userSelect:'none',WebkitUserSelect:'none'}}>
+    <div style={{minHeight:'100vh',position:'relative',overflow:'hidden',display:'flex',alignItems:'center',justifyContent:'center',background:'#1a1a1a',userSelect:'none',WebkitUserSelect:'none'}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Libre+Baskerville:wght@700&family=Share+Tech+Mono&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
         *{user-select:none;-webkit-user-select:none;box-sizing:border-box}
@@ -312,7 +304,7 @@ export default function Login(){
           94%{opacity:0}
         }
         @keyframes stFlicker{0%,100%{opacity:1}93.5%{opacity:1}94%{opacity:0.55}94.3%{opacity:1}97.8%{opacity:0.82}98%{opacity:1}}
-        .st-title{position:relative;display:inline-block;animation:stG 14s steps(1) infinite,stFlicker 8s linear infinite}
+        .st-title{position:relative;display:inline-block;animation:stG 14s steps(1) infinite,stFlicker 8s linear infinite;filter:drop-shadow(0 0 18px rgba(255,120,0,0.55)) drop-shadow(0 0 6px rgba(255,60,0,0.4))}
         .st-title::before,.st-title::after{content:attr(data-text);position:absolute;inset:0;background:linear-gradient(180deg,#FF9500 0%,#FF4800 42%,#CC1200 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;pointer-events:none}
         .st-title::before{animation:stGA 14s steps(1) infinite}
         .st-title::after{animation:stGB 14s steps(1) infinite}
@@ -343,15 +335,10 @@ export default function Login(){
         .btn-off{background:rgba(255,255,255,0.04);color:rgba(240,195,130,0.16);cursor:not-allowed;border:1px solid rgba(75,28,0,0.22)}
       `}</style>
 
-      <video autoPlay loop muted playsInline onCanPlay={()=>setVideoReady(true)}
-        style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',zIndex:0,opacity:videoReady?0.78:0,transition:'opacity 1.2s ease'}}>
-        <source src="/lava-bg.mp4" type="video/mp4"/>
-      </video>
+      <SceneCanvas active={true} cardRef={cardRef}/>
 
-      <SceneCanvas active={videoReady}/>
-
-      <div className={`card-float card-border${shake?' shake':''}`}
-        style={{position:'relative',zIndex:10,width:'min(92vw,415px)',background:'rgba(6,2,0,0.50)',borderRadius:'11px',border:'1px solid rgba(150,50,0,0.36)',backdropFilter:'blur(7px)',padding:'clamp(1.5rem,4vw,2.1rem) clamp(1.3rem,4vw,2rem)',overflow:'hidden'}}>
+      <div ref={cardRef} className={`card-float card-border${shake?' shake':''}`}
+        style={{position:'relative',zIndex:10,width:'min(92vw,415px)',background:'rgba(15,15,16,0.62)',borderRadius:'11px',border:'1px solid rgba(150,50,0,0.36)',backdropFilter:'blur(7px)',padding:'clamp(1.5rem,4vw,2.1rem) clamp(1.3rem,4vw,2rem)',overflow:'hidden'}}>
 
         <VineBorder/>
 
@@ -365,12 +352,12 @@ export default function Login(){
           <LightStrip/>
 
           <div style={{textAlign:'center',marginBottom:'1.2rem',marginTop:'2px'}}>
-            <p style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.58rem',letterSpacing:'0.30em',textTransform:'uppercase',color:'rgba(235,150,70,0.38)',marginBottom:'0.55rem'}}>// do you copy?</p>
+            <p style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.58rem',letterSpacing:'0.30em',textTransform:'uppercase',color:'rgba(220,220,210,0.45)',marginBottom:'0.55rem'}}>// do you copy?</p>
             <h1 className="st-title" data-text="RECURSION HELL"
-              style={{fontFamily:'"Libre Baskerville",Georgia,"Times New Roman",serif',fontSize:'clamp(1.55rem,5.5vw,2.05rem)',fontWeight:700,letterSpacing:'0.060em',lineHeight:1.06,margin:0,background:'linear-gradient(180deg,#FFB040 0%,#FF6500 36%,#FF2200 74%,#961000 100%)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text'}}>
+              style={{fontFamily:'"Libre Baskerville",Georgia,"Times New Roman",serif',fontSize:'clamp(1.55rem,5.5vw,2.05rem)',fontWeight:700,letterSpacing:'0.060em',lineHeight:1.06,margin:0,background:'linear-gradient(180deg,#FFE566 0%,#FFAA00 25%,#FF6500 55%,#FF2200 80%,#961000 100%)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text'}}>
               RECURSION HELL
             </h1>
-            <p style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.56rem',color:'rgba(215,120,45,0.32)',letterSpacing:'0.20em',marginTop:'0.48rem'}}>THE &nbsp; UPSIDE &nbsp; DOWN &nbsp; ∞</p>
+            <p style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.56rem',color:'rgba(220,220,210,0.35)',letterSpacing:'0.20em',marginTop:'0.48rem'}}>THE &nbsp; UPSIDE &nbsp; DOWN &nbsp; ∞</p>
           </div>
 
           <div style={{height:'1px',marginBottom:'1.25rem',background:'linear-gradient(90deg,transparent,rgba(170,60,0,0.48),rgba(235,115,0,0.52),rgba(170,60,0,0.48),transparent)'}}/>
@@ -384,15 +371,15 @@ export default function Login(){
           <form onSubmit={handleSubmit} style={{display:'flex',flexDirection:'column',gap:'1rem'}}>
             <div>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'0.38rem'}}>
-                <label style={{fontFamily:'"Barlow",sans-serif',fontSize:'0.78rem',fontWeight:600,color:'rgba(238,198,155,0.76)'}}>Team Name</label>
-                <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.54rem',color:'rgba(235,105,0,0.36)',letterSpacing:'0.08em'}}>IDENTIFIER</span>
+                <label style={{fontFamily:'"Barlow",sans-serif',fontSize:'0.78rem',fontWeight:600,color:'rgba(235,235,225,0.85)'}}>Team Name</label>
+                <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.54rem',color:'rgba(200,200,190,0.35)',letterSpacing:'0.08em'}}>IDENTIFIER</span>
               </div>
               <input className="hell-input" value={teamName} onChange={e=>setTeamName(e.target.value)} autoComplete="username" spellCheck={false} placeholder="e.g. StackSmashers"/>
             </div>
             <div>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'0.38rem'}}>
-                <label style={{fontFamily:'"Barlow",sans-serif',fontSize:'0.78rem',fontWeight:600,color:'rgba(238,198,155,0.76)'}}>Password</label>
-                <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.54rem',color:'rgba(235,105,0,0.36)',letterSpacing:'0.08em'}}>ENCRYPTED</span>
+                <label style={{fontFamily:'"Barlow",sans-serif',fontSize:'0.78rem',fontWeight:600,color:'rgba(235,235,225,0.85)'}}>Password</label>
+                <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.54rem',color:'rgba(200,200,190,0.35)',letterSpacing:'0.08em'}}>ENCRYPTED</span>
               </div>
               <input className="hell-input" type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password" placeholder="••••••••"/>
             </div>
@@ -407,10 +394,10 @@ export default function Login(){
           </form>
 
           <div style={{marginTop:'1.1rem',paddingTop:'0.8rem',borderTop:'1px solid rgba(120,40,0,0.18)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.53rem',color:'rgba(238,178,95,0.17)',letterSpacing:'0.06em'}}>// v1.0 — stack depth: ∞</span>
+            <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.53rem',color:'rgba(210,210,200,0.22)',letterSpacing:'0.06em'}}>// v1.0 — stack depth: ∞</span>
             <span style={{display:'flex',alignItems:'center',gap:'0.32rem'}}>
               <span style={{width:5,height:5,borderRadius:'50%',background:'#FF3800',boxShadow:'0 0 7px rgba(255,56,0,0.92)',animation:'blink 1.5s step-start infinite',display:'inline-block'}}/>
-              <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.53rem',color:'rgba(255,85,0,0.40)',letterSpacing:'0.06em'}}>CONTEST LIVE</span>
+              <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.53rem',color:'rgba(220,220,210,0.45)',letterSpacing:'0.06em'}}>CONTEST LIVE</span>
             </span>
           </div>
         </div>
