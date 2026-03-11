@@ -1,7 +1,68 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import SplashCursor from '../components/SplashCursor'
+import Lightning from '../components/Lightning'
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
+
+/* ═══════════════════════════════════════════
+   GLOBAL THEME VARIABLES — edit here to restyle everything
+═══════════════════════════════════════════ */
+const THEME = {
+  // ── Background ──
+  bgEmberStart:   'rgb(38, 36, 35)',       // warm ember start color on load
+  bgDarkEnd:      'rgb(22, 20, 20)',        // deep red-black after transition
+
+  // ── Ember glow (phase 0) ──
+  emberGlow:      'rgba(180,40,0,0.12)',
+  emberMid:       'rgba(140,20,0,0.07)',
+  emberBottom:    'rgba(120,15,0,0.10)',
+  emberSides:     'rgba(100,10,0,0.06)',
+
+  // ── Blood red atmosphere (phase 1) ──
+  redTop:         'rgba(100,5,0,0.22)',   // lighter red top vignette
+  redBottom:      'rgba(80,3,0,0.20)',    // darker red bottom
+  redLeftEdge:    'rgba(60,0,10,0.08)',    // purple-crimson left
+  redRightEdge:   'rgba(70,8,0,0.07)',   // amber-red right
+
+  // ── Card ──
+  cardBg:         'rgba(22,8,6,0.80)',
+  cardBorderIdle: 'rgba(200,70,0,0.35)',
+  cardBorderGlow: 'rgba(255,100,0,0.50)',
+
+  // ── Canvas particles ──
+  emberPalette: [
+    [255,80,0],[230,50,0],[200,30,0],
+    [255,120,20],[200,60,0],[180,30,0],
+    [140,0,0],[100,0,0],[80,0,0],
+  ],
+  sporeColor:     [255,110,0],
+  webNodeColor:   [210,70,0],
+
+  // ── Bulbs ──
+  bulbColors: ['#FF4400','#FF7700','#FFAA00','#FF2200','#FF6600','#FFCC33','#FF3300','#FF8800','#FF5500'],
+
+  // ── Button ──
+  btnGradient:    'linear-gradient(135deg,#FF6600 0%,#DD2200 40%,#AA0000 100%)',
+  btnText:        '#FFF5E0',
+  btnGlowIdle:    'rgba(220,80,0,0.55)',
+  btnGlowPulse:   'rgba(255,100,0,0.70)',
+
+  // ── Text ──
+  labelColor:     '#F0DDD8',
+  subtitleColor:  'rgba(255,160,60,0.85)',
+  eyebrowColor:   'rgba(255,170,80,0.80)',
+  tagColor:       'rgba(255,150,60,0.88)',
+  footerColor:    'rgba(220,180,160,0.65)',
+  footerDot:      '#FF6600',
+
+  // ── Divider / mirror line ──
+  dividerColor:   'rgba(255,110,0,0.80)',
+
+  // ── Title ──
+  titleGradient:  'linear-gradient(180deg,#FF6644 0%,#FF2200 30%,#EE0000 65%,#AA0000 100%)',
+  titleGlow:      'rgba(255,60,0,1)',
+  titleGlowOuter: 'rgba(220,30,0,0.8)',
+}
 
 /* ─────────────────────────────────────────
    CANVAS: embers + spores + web (ST palette)
@@ -21,12 +82,7 @@ function SceneCanvas({ cardRef }) {
     resize()
     window.addEventListener('resize', resize)
 
-    // Ember + red mixed palette
-    const PALETTE = [
-      [255,80,0],[230,50,0],[200,30,0],   // ember orange-red
-      [255,120,20],[200,60,0],[180,30,0],  // warm ember
-      [140,0,0],[100,0,0],[80,0,0],        // deep red
-    ]
+    const PALETTE = THEME.emberPalette
 
     function getCardRect() {
       if (cardRef && cardRef.current) {
@@ -132,9 +188,9 @@ function SceneCanvas({ cardRef }) {
         if(d>WD) continue
         const fade=1-d/WD
         ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y)
-        ctx.strokeStyle=`rgba(120,0,0,${fade*0.07})`; ctx.lineWidth=fade*0.5; ctx.stroke()
+        ctx.strokeStyle=`rgba(180,60,0,${fade*0.09})`; ctx.lineWidth=fade*0.6; ctx.stroke()
       }
-      for(const n of webNodes){ ctx.beginPath(); ctx.arc(n.x,n.y,n.r,0,Math.PI*2); ctx.fillStyle=`rgba(160,0,0,${0.06+Math.sin(n.pulse)*0.03})`; ctx.fill() }
+      for(const n of webNodes){ ctx.beginPath(); ctx.arc(n.x,n.y,n.r,0,Math.PI*2); ctx.fillStyle=`rgba(${THEME.webNodeColor[0]},${THEME.webNodeColor[1]},${THEME.webNodeColor[2]},${0.08+Math.sin(n.pulse)*0.04})`; ctx.fill() }
       ctx.restore()
 
       // Spores
@@ -144,11 +200,11 @@ function SceneCanvas({ cardRef }) {
         if((s.vx>0&&s.x>W+12)||(s.vx<0&&s.x<-12)) Object.assign(s,spawnSpore(W,H))
         const pa=s.alpha*(0.65+Math.sin(s.pulse)*0.25)
         ctx.save(); ctx.globalAlpha=pa
-        ctx.strokeStyle=`rgba(180,0,0,${pa*0.4})`; ctx.lineWidth=0.35
+        ctx.strokeStyle=`rgba(${THEME.sporeColor[0]},${THEME.sporeColor[1]},${THEME.sporeColor[2]},${pa*0.4})`; ctx.lineWidth=0.35
         ctx.beginPath(); ctx.moveTo(s.x-s.r*1.6,s.y); ctx.lineTo(s.x+s.r*1.6,s.y); ctx.stroke()
         ctx.beginPath(); ctx.moveTo(s.x,s.y-s.r*1.6); ctx.lineTo(s.x,s.y+s.r*1.6); ctx.stroke()
         const sg=ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,s.r*2.4)
-        sg.addColorStop(0,`rgba(220,30,0,${pa})`); sg.addColorStop(0.5,`rgba(140,0,0,${pa*0.5})`); sg.addColorStop(1,'rgba(0,0,0,0)')
+        sg.addColorStop(0,`rgba(${THEME.sporeColor[0]},${THEME.sporeColor[1]},${THEME.sporeColor[2]},${pa})`); sg.addColorStop(0.5,`rgba(180,40,0,${pa*0.5})`); sg.addColorStop(1,'rgba(0,0,0,0)')
         ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(s.x,s.y,s.r*2.4,0,Math.PI*2); ctx.fill(); ctx.restore()
       }
 
@@ -190,7 +246,7 @@ function SceneCanvas({ cardRef }) {
    - Idle: one random bulb flickers at a time
    - Typing: rapid one-by-one flicker
 ───────────────────────────────────────── */
-const ST_COLORS=['#FF4400','#FF7700','#FFAA00','#FF2200','#FF6600','#FFCC33','#FF3300','#FF8800','#FF5500']
+const ST_COLORS = THEME.bulbColors
 const WIRE_SAG = [0,2,4,5,6,5,4,2,0]  // sag offsets
 
 function LightStrip({ typing }) {
@@ -339,22 +395,29 @@ function Spider({ cardRef }) {
       ctx.translate(x, y)
       ctx.rotate(angle + Math.PI / 2)
 
-      const bc = 'rgba(30,10,5,0.95)'
-      const lc = 'rgba(20,6,3,0.90)'
+      // scale up 2x
+      ctx.scale(2.0, 2.0)
 
-      // red glow
-      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 11)
-      g.addColorStop(0, 'rgba(200,40,0,0.18)')
+      const bc = '#1a1a1a'           // dark charcoal body — visible on card
+      const lc = '#2a2a2a'           // slightly lighter legs
+      const lcHi = '#444444'         // leg highlight
+
+      // outer glow — amber/red halo
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 16)
+      g.addColorStop(0, 'rgba(220,80,0,0.30)')
+      g.addColorStop(0.5, 'rgba(160,30,0,0.12)')
       g.addColorStop(1, 'rgba(0,0,0,0)')
       ctx.fillStyle = g
-      ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI * 2); ctx.fill()
 
-      // 8 legs
+      // 8 legs — thicker, more visible
       const legDefs = [
         [-1, -0.5, 7, 6], [-1, -1.0, 8, 7], [-1, -1.5, 7, 6], [-1, -2.0, 6, 5],
         [ 1,  0.5, 7, 6], [ 1,  1.0, 8, 7], [ 1,  1.5, 7, 6], [ 1,  2.0, 6, 5],
       ]
-      ctx.strokeStyle = lc; ctx.lineWidth = 1.1; ctx.lineCap = 'round'
+
+      // leg shadow pass first
+      ctx.strokeStyle = 'rgba(255,80,0,0.12)'; ctx.lineWidth = 2.2; ctx.lineCap = 'round'
       legDefs.forEach(([side, base, l1, l2], i) => {
         const phase = legPhase + (i % 2 === 0 ? 0 : Math.PI)
         const bend = Math.sin(phase) * 0.35
@@ -368,20 +431,54 @@ function Spider({ cardRef }) {
         ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo(mx, my, ex, ey); ctx.stroke()
       })
 
-      // abdomen
+      // leg main pass
+      ctx.strokeStyle = lc; ctx.lineWidth = 1.6
+      legDefs.forEach(([side, base, l1, l2], i) => {
+        const phase = legPhase + (i % 2 === 0 ? 0 : Math.PI)
+        const bend = Math.sin(phase) * 0.35
+        const a1 = base + bend * side
+        const sx = side * 4, sy = -1 + i * 0.5
+        const mx = sx + Math.cos(a1) * l1 * side
+        const my = sy + Math.sin(Math.abs(a1)) * l1 - 2
+        const a2 = a1 + (side * 0.9 + bend * 0.4)
+        const ex = mx + Math.cos(a2) * l2 * side
+        const ey = my + Math.sin(Math.abs(a2)) * l2
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo(mx, my, ex, ey); ctx.stroke()
+      })
+
+      // abdomen — dark with red hourglass
       ctx.fillStyle = bc
       ctx.beginPath(); ctx.ellipse(0, 4, 4.5, 6, 0, 0, Math.PI * 2); ctx.fill()
-      ctx.fillStyle = 'rgba(200,30,0,0.80)'
-      ctx.beginPath(); ctx.ellipse(0, 4, 1.5, 2.5, 0, 0, Math.PI * 2); ctx.fill()
+      // abdomen sheen
+      const abdSheen = ctx.createRadialGradient(-1, 1, 0, 0, 4, 5)
+      abdSheen.addColorStop(0, 'rgba(80,80,80,0.4)')
+      abdSheen.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = abdSheen
+      ctx.beginPath(); ctx.ellipse(0, 4, 4.5, 6, 0, 0, Math.PI * 2); ctx.fill()
+      // red hourglass marking — bright
+      ctx.fillStyle = 'rgba(220,40,0,0.95)'
+      ctx.beginPath(); ctx.ellipse(0, 3, 1.2, 1.8, 0, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath(); ctx.ellipse(0, 5.5, 0.9, 1.2, 0, 0, Math.PI * 2); ctx.fill()
 
       // cephalothorax
       ctx.fillStyle = bc
       ctx.beginPath(); ctx.ellipse(0, -2.5, 3.5, 4, 0, 0, Math.PI * 2); ctx.fill()
+      // sheen
+      const ctSheen = ctx.createRadialGradient(-0.8, -3.5, 0, 0, -2.5, 4)
+      ctSheen.addColorStop(0, 'rgba(90,90,90,0.35)')
+      ctSheen.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = ctSheen
+      ctx.beginPath(); ctx.ellipse(0, -2.5, 3.5, 4, 0, 0, Math.PI * 2); ctx.fill()
 
-      // eyes
-      ctx.fillStyle = 'rgba(200,40,0,0.85)'
+      // eyes — bright glowing red
+      ctx.fillStyle = 'rgba(255,60,0,1.0)'
       ;[[-1.4,-4.2],[1.4,-4.2],[-0.6,-5.0],[0.6,-5.0]].forEach(([ex,ey]) => {
-        ctx.beginPath(); ctx.arc(ex, ey, 0.7, 0, Math.PI*2); ctx.fill()
+        ctx.beginPath(); ctx.arc(ex, ey, 0.9, 0, Math.PI*2); ctx.fill()
+      })
+      // eye glow
+      ctx.fillStyle = 'rgba(255,100,0,0.4)'
+      ;[[-1.4,-4.2],[1.4,-4.2],[-0.6,-5.0],[0.6,-5.0]].forEach(([ex,ey]) => {
+        ctx.beginPath(); ctx.arc(ex, ey, 1.8, 0, Math.PI*2); ctx.fill()
       })
 
       ctx.restore()
@@ -422,70 +519,161 @@ function Spider({ cardRef }) {
 /* ─────────────────────────────────────────
    UPSIDE DOWN BG — inverted mirrored world
 ───────────────────────────────────────── */
+/* ─────────────────────────────────────────
+   ANIMATED BG
+   - Ember warm start → fades to dark blood red over 5s
+   - Lightning: LEFT → RIGHT → CENTRE, 8s apart, loops
+   - Rich color variety: ember orange, amber, crimson, deep red
+───────────────────────────────────────── */
 function UpsideDownBG() {
+  const [phase, setPhase]       = useState(0)      // 0=ember, 1=dark red
+  const [boltSlot, setBoltSlot] = useState(null)   // null | 'left' | 'right' | 'centre'
+
+  // ── Ember → dark red transition ──
+  useEffect(() => {
+    const delay = setTimeout(() => {
+      const startT = performance.now()
+      const DUR = 5000
+      let raf
+      function tick() {
+        const t = Math.min((performance.now() - startT) / DUR, 1)
+        const e = t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2
+        setPhase(e)
+        if (t < 1) raf = requestAnimationFrame(tick)
+      }
+      raf = requestAnimationFrame(tick)
+      return () => cancelAnimationFrame(raf)
+    }, 800)
+    return () => clearTimeout(delay)
+  }, [])
+
+  // ── Sequential lightning: left → right → centre, 8s apart, loops ──
+  useEffect(() => {
+    const SEQUENCE = ['left','right','centre']
+    const BOLT_DURATION = 700   // how long each bolt stays visible
+    const GAP = 8000             // gap between bolts
+    let idx = 0
+    let timeouts = []
+
+    function showNext() {
+      setBoltSlot(SEQUENCE[idx % SEQUENCE.length])
+      const t1 = setTimeout(() => {
+        setBoltSlot(null)
+        const t2 = setTimeout(() => {
+          idx++
+          showNext()
+        }, GAP)
+        timeouts.push(t2)
+      }, BOLT_DURATION)
+      timeouts.push(t1)
+    }
+
+    // first bolt appears after the ember→red transition settles (~6s)
+    const start = setTimeout(showNext, 6500)
+    timeouts.push(start)
+    return () => timeouts.forEach(clearTimeout)
+  }, [])
+
+  const p = phase
+
+  // ── bg color: interpolate THEME.bgEmberStart → THEME.bgDarkEnd ──
+  const [eR,eG,eB] = [38,36,35]  // bgEmberStart
+  const [dR,dG,dB] = [22,20,20]  // bgDarkEnd
+  const bgR = Math.round(eR + (dR - eR) * p)
+  const bgG = Math.round(eG + (dG - eG) * p)
+  const bgB = Math.round(eB + (dB - eB) * p)
+
+  // bolt config per slot — different hues for color variety
+  const boltConfigs = {
+    left:   { hue: 18,  xOffset: -0.75, speed: 1.0, intensity: 2.8, size: 1.1 },  // ember orange-red
+    right:  { hue: 355, xOffset:  0.75, speed: 0.85,intensity: 2.6, size: 1.0 },  // pure crimson
+    centre: { hue: 8,   xOffset:  0,    speed: 0.95, intensity: 3.2, size: 1.3 },  // deep red-orange
+  }
+
   return (
     <div style={{position:'absolute',inset:0,zIndex:0,overflow:'hidden'}}>
-      {/* Base dark bg */}
-      <div style={{position:'absolute',inset:0,background:'#080406'}}/>
 
-      {/* Inverted/mirrored city silhouette */}
+      {/* Base bg — ember warm → near black */}
       <div style={{
-        position:'absolute', bottom:0, left:0, right:0, height:'45%',
-        background:'linear-gradient(0deg, #0a0204 0%, transparent 100%)',
-        transform:'scaleY(-1)',
-        opacity:0.7,
+        position:'absolute', inset:0,
+        background:`rgb(${bgR},${bgG},${bgB})`,
       }}/>
 
-      {/* EMBER world — top half (above mirror) */}
+      {/* ── EMBER phase: warm orange radial centre glow ── */}
       <div style={{
-        position:'absolute', top:0, left:0, right:0, height:'50%',
-        background:'linear-gradient(180deg, rgba(200,70,0,0.28) 0%, rgba(160,40,0,0.18) 60%, transparent 100%)',
+        position:'absolute', inset:0,
+        background:`radial-gradient(ellipse at 50% 42%, ${THEME.emberGlow} 0%, ${THEME.emberMid} 35%, rgba(120,20,0,0.15) 65%, transparent 85%)`,
+        opacity: Math.max(0, 1 - p * 1.6),
+        pointerEvents:'none',
       }}/>
+      {/* ember bottom warmth */}
       <div style={{
-        position:'absolute', top:0, left:0, right:0, height:'30%',
-        background:'radial-gradient(ellipse at 50% 0%, rgba(255,100,0,0.22) 0%, rgba(200,50,0,0.12) 50%, transparent 80%)',
+        position:'absolute', bottom:0, left:0, right:0, height:'60%',
+        background:`linear-gradient(0deg, ${THEME.emberBottom} 0%, rgba(100,25,0,0.25) 50%, transparent 100%)`,
+        opacity: Math.max(0, 1 - p * 1.4),
+        pointerEvents:'none',
+      }}/>
+      {/* amber side streaks */}
+      <div style={{
+        position:'absolute', inset:0,
+        background:`radial-gradient(ellipse at 15% 60%, ${THEME.emberSides} 0%, transparent 50%), radial-gradient(ellipse at 85% 40%, ${THEME.emberSides} 0%, transparent 45%)`,
+        opacity: Math.max(0, 1 - p * 1.5),
+        pointerEvents:'none',
       }}/>
 
-      {/* BLOOD RED world — bottom half (below mirror / Upside Down) */}
+      {/* ── DARK RED phase: blood atmosphere ── */}
       <div style={{
-        position:'absolute', bottom:0, left:0, right:0, height:'50%',
-        background:'linear-gradient(0deg, rgba(120,0,0,0.45) 0%, rgba(80,0,0,0.25) 60%, transparent 100%)',
+        position:'absolute', top:0, left:0, right:0, height:'60%',
+        background:`linear-gradient(180deg, ${THEME.redTop} 0%, rgba(70,0,0,0.35) 55%, transparent 100%)`,
+        opacity: Math.min(1, p * 1.3),
+        pointerEvents:'none',
       }}/>
       <div style={{
-        position:'absolute', bottom:0, left:0, right:0, height:'30%',
-        background:'radial-gradient(ellipse at 50% 100%, rgba(160,0,0,0.35) 0%, rgba(90,0,0,0.18) 50%, transparent 80%)',
+        position:'absolute', bottom:0, left:0, right:0, height:'60%',
+        background:`linear-gradient(0deg, ${THEME.redBottom} 0%, rgba(50,0,0,0.35) 55%, transparent 100%)`,
+        opacity: Math.min(1, p * 1.2),
+        pointerEvents:'none',
+      }}/>
+      {/* left edge — purple-crimson */}
+      <div style={{
+        position:'absolute', inset:0,
+        background:`radial-gradient(ellipse at 0% 50%, ${THEME.redLeftEdge} 0%, transparent 45%)`,
+        opacity: Math.min(1, p * 1.4),
+        pointerEvents:'none',
+      }}/>
+      {/* right edge — amber-red */}
+      <div style={{
+        position:'absolute', inset:0,
+        background:`radial-gradient(ellipse at 100% 50%, ${THEME.redRightEdge} 0%, transparent 45%)`,
+        opacity: Math.min(1, p * 1.4),
+        pointerEvents:'none',
       }}/>
 
-      {/* Horizontal mirror line — the divide between worlds */}
+      {/* ── SEQUENTIAL LIGHTNING ── */}
+      {boltSlot && (() => {
+        const cfg = boltConfigs[boltSlot]
+        return (
+          <div style={{
+            position:'absolute', inset:0,
+            opacity: 1,
+            mixBlendMode:'screen',
+            pointerEvents:'none',
+            animation:'boltFadeIn 0.3s ease-out',
+          }}>
+            <style>{`@keyframes boltFadeIn{from{opacity:0}to{opacity:1}}`}</style>
+            <Lightning {...cfg}/>
+          </div>
+        )
+      })()}
+
+      {/* Mirror line — shifts from amber → deep red */}
       <div style={{
         position:'absolute', top:'50%', left:0, right:0, height:'1px',
-        background:'linear-gradient(90deg,transparent,rgba(200,60,0,0.45),rgba(255,80,0,0.70),rgba(200,60,0,0.45),transparent)',
+        background: p < 0.5
+          ? 'linear-gradient(90deg,transparent,rgba(220,80,0,0.50),rgba(255,100,0,0.80),rgba(220,80,0,0.50),transparent)'
+          : 'linear-gradient(90deg,transparent,rgba(160,0,0,0.45),rgba(200,0,0,0.70),rgba(160,0,0,0.45),transparent)',
+        transition:'background 1s',
       }}/>
-
-      {/* Dark tree silhouettes — upside down */}
-      <svg style={{position:'absolute',bottom:0,left:0,width:'100%',height:'40%',opacity:0.55}} viewBox="0 0 1200 300" preserveAspectRatio="none">
-        <g transform="scale(1,-1) translate(0,-300)">
-          {/* Trees */}
-          {[50,120,200,290,380,450,520,600,670,750,820,900,970,1050,1130].map((x,i)=>(
-            <g key={i}>
-              <rect x={x} y={0} width={8+i%4*3} height={60+i%5*25} fill="#1a0404"/>
-              <polygon points={`${x-20+(i%3)*5},${65+i%4*20} ${x+4+(i%3)*3},${120+i%5*30} ${x+28+(i%3)*4},${65+i%4*20}`} fill="#1a0404"/>
-              <polygon points={`${x-14+(i%3)*3},${45+i%4*15} ${x+4+(i%3)*3},${95+i%5*22} ${x+22+(i%3)*3},${45+i%4*15}`} fill="#1e0505"/>
-            </g>
-          ))}
-        </g>
-      </svg>
-
-      {/* Mirrored trees — top (upside down) */}
-      <svg style={{position:'absolute',top:0,left:0,width:'100%',height:'40%',opacity:0.45}} viewBox="0 0 1200 300" preserveAspectRatio="none">
-        {[70,150,230,320,400,480,560,640,710,790,870,950,1020,1100].map((x,i)=>(
-          <g key={i}>
-            <rect x={x} y={300-60-i%5*25} width={8+i%4*3} height={60+i%5*25} fill="#1a0404"/>
-            <polygon points={`${x-20+(i%3)*5},${300-65-i%4*20} ${x+4},${300-120-i%5*30} ${x+28+(i%3)*4},${300-65-i%4*20}`} fill="#1a0404"/>
-          </g>
-        ))}
-      </svg>
-
 
     </div>
   )
@@ -547,7 +735,7 @@ export default function Login(){
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Share+Tech+Mono&family=Barlow:wght@400;500;600&display=swap');
-        *{box-sizing:border-box;user-select:none;-webkit-user-select:none}
+        *{box-sizing:border-box;user-select:none;-webkit-user-select:none} html,body,*{cursor:none!important}
         input{user-select:text!important;-webkit-user-select:text!important}
 
         @keyframes shakeX{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-9px)}40%,80%{transform:translateX(9px)}}
@@ -559,21 +747,21 @@ export default function Login(){
 
         /* ST title glow flicker */
         @keyframes stTitleFlicker{
-          0%,90%,100%{opacity:1;filter:drop-shadow(0 0 22px rgba(255,0,0,1)) drop-shadow(0 0 50px rgba(200,0,0,0.8)) drop-shadow(0 0 80px rgba(160,0,0,0.4))}
+          0%,90%,100%{opacity:1;filter:drop-shadow(0 0 6px rgba(160,0,0,0.6)) drop-shadow(0 0 18px rgba(100,0,0,0.35))}
           91%{opacity:0.7;filter:drop-shadow(0 0 6px rgba(180,0,0,0.4))}
-          92%{opacity:1;filter:drop-shadow(0 0 30px rgba(255,60,60,1)) drop-shadow(0 0 60px rgba(220,0,0,0.9))}
+          92%{opacity:1;filter:drop-shadow(0 0 10px rgba(180,0,0,0.8)) drop-shadow(0 0 25px rgba(120,0,0,0.5))}
           95%{opacity:0.85;filter:drop-shadow(0 0 10px rgba(160,0,0,0.6))}
           96%{opacity:1;filter:drop-shadow(0 0 18px rgba(180,0,0,0.9))}
         }
 
         @keyframes borderPulse{
-          0%,100%{box-shadow:0 0 0 1px rgba(140,0,0,0.3) inset, 0 0 30px rgba(100,0,0,0.12), 0 8px 32px rgba(0,0,0,0.6)}
-          50%    {box-shadow:0 0 0 1px rgba(180,0,0,0.5) inset, 0 0 50px rgba(140,0,0,0.20), 0 8px 32px rgba(0,0,0,0.6)}
+          0%,100%{box-shadow:0 0 0 1px ${THEME.cardBorderIdle} inset, 0 0 30px rgba(180,50,0,0.15), 0 8px 40px rgba(0,0,0,0.65)}
+          50%    {box-shadow:0 0 0 1px ${THEME.cardBorderGlow} inset, 0 0 55px rgba(220,70,0,0.22), 0 8px 40px rgba(0,0,0,0.65)}
         }
 
         @keyframes btnGlow{
-          0%,100%{box-shadow:0 4px 18px rgba(160,0,0,0.45),0 2px 6px rgba(0,0,0,0.7)}
-          50%    {box-shadow:0 4px 28px rgba(200,0,0,0.65),0 2px 6px rgba(0,0,0,0.7),0 0 44px rgba(140,0,0,0.22)}
+          0%,100%{box-shadow:0 4px 20px ${THEME.btnGlowIdle},0 2px 6px rgba(0,0,0,0.7)}
+          50%    {box-shadow:0 4px 32px ${THEME.btnGlowPulse},0 2px 6px rgba(0,0,0,0.7),0 0 50px rgba(200,60,0,0.30)}
         }
         @keyframes btnSweep{0%{left:-80%}100%{left:140%}}
 
@@ -585,22 +773,22 @@ export default function Login(){
 
         .hell-input{
           width:100%;
-          background:rgba(6,0,0,0.45);
-          border:1px solid rgba(140,0,0,0.35);
+          background:rgba(10,4,0,0.50);
+          border:1px solid rgba(180,70,0,0.40);
           border-radius:6px;
           padding:11px 14px;
           color:#F5E8D8;
           font-family:'Share Tech Mono',monospace;
           font-size:0.88rem;
           outline:none;
-          caret-color:#CC0000;
+          caret-color:#FF6600;
           transition:border-color .2s,box-shadow .2s,background .2s;
         }
         .hell-input::placeholder{color:rgba(255,180,150,0.50);font-style:italic}
         .hell-input:focus{
-          border-color:rgba(180,0,0,0.75);
-          background:rgba(10,0,0,0.55);
-          box-shadow:0 0 0 3px rgba(140,0,0,0.12),0 0 16px rgba(120,0,0,0.10);
+          border-color:rgba(220,90,0,0.80);
+          background:rgba(14,5,0,0.60);
+          box-shadow:0 0 0 3px rgba(200,70,0,0.18),0 0 20px rgba(180,60,0,0.14);
         }
 
         .login-btn{
@@ -610,13 +798,13 @@ export default function Login(){
           position:relative;overflow:hidden;transition:filter .2s,transform .15s;
         }
         .btn-on{
-          background:linear-gradient(180deg,#8B0000 0%,#5A0000 50%,#3A0000 100%);
-          color:#F5E8D8;text-shadow:0 1px 4px rgba(0,0,0,0.8);
+          background:${THEME.btnGradient};
+          color:${THEME.btnText};text-shadow:0 1px 6px rgba(0,0,0,0.6);
           animation:btnGlow 3s ease-in-out infinite;
         }
         .btn-on::after{
           content:'';position:absolute;top:0;left:-80%;width:50%;height:100%;
-          background:linear-gradient(90deg,transparent,rgba(255,255,255,0.07),transparent);
+          background:linear-gradient(90deg,transparent,rgba(255,160,60,0.15),transparent);
           transform:skewX(-18deg);animation:btnSweep 4s ease-in-out infinite;
         }
         .btn-on:hover{filter:brightness(1.18);transform:translateY(-2px)}
@@ -635,7 +823,7 @@ export default function Login(){
         className={`card-float card-border${shake?' shake':''}`}
         style={{
           position:'relative',zIndex:10,width:'min(92vw,420px)',
-          background:'rgba(22,8,6,0.80)',
+          background:THEME.cardBg,
           borderRadius:'14px',
           border:'1px solid rgba(140,0,0,0.28)',
           backdropFilter:'blur(18px) saturate(1.4)',
@@ -664,35 +852,43 @@ export default function Login(){
 
           {/* Title */}
           <div style={{textAlign:'center',marginBottom:'1.1rem',marginTop:'4px'}}>
-            <p style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.55rem',letterSpacing:'0.32em',textTransform:'uppercase',color:'rgba(255,180,120,0.72)',marginBottom:'0.5rem'}}>
-              // do you copy?
-            </p>
-
             <h1
               className="st-title"
               style={{
                 fontFamily:'"Cinzel",serif',
-                fontSize:'clamp(1.6rem,5.8vw,2.1rem)',
                 fontWeight:900,
-                letterSpacing:'0.04em',
-                lineHeight:1.05,
+                letterSpacing:'0.06em',
+                lineHeight:1.0,
                 margin:0,
-                background:'linear-gradient(180deg,#FF6644 0%,#FF2200 30%,#EE0000 65%,#AA0000 100%)',
+                display:'flex',
+                flexDirection:'column',
+                alignItems:'center',
+                gap:'0.05em',
+              }}
+            >
+              <span style={{
+                fontSize:'clamp(2.0rem,7.5vw,2.9rem)',
+                background:'linear-gradient(180deg,#CC1100 0%,#8B0000 55%,#5A0000 100%)',
                 WebkitBackgroundClip:'text',
                 WebkitTextFillColor:'transparent',
                 backgroundClip:'text',
-              }}
-            >
-              RECURSION HELL
+              }}>RECURSION</span>
+              <span style={{
+                fontSize:'clamp(2.2rem,8.2vw,3.2rem)',
+                background:'linear-gradient(180deg,#AA0000 0%,#6B0000 50%,#3A0000 100%)',
+                WebkitBackgroundClip:'text',
+                WebkitTextFillColor:'transparent',
+                backgroundClip:'text',
+              }}>HELL</span>
             </h1>
 
-            <p style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.54rem',color:'rgba(255,140,80,0.75)',letterSpacing:'0.22em',marginTop:'0.42rem'}}>
+            <p style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.54rem',color:THEME.subtitleColor,letterSpacing:'0.22em',marginTop:'0.55rem'}}>
               THE &nbsp; UPSIDE &nbsp; DOWN &nbsp; ∞
             </p>
           </div>
 
           {/* Divider */}
-          <div style={{height:'1px',marginBottom:'1.2rem',background:'linear-gradient(90deg,transparent,rgba(180,60,0,0.55),rgba(240,90,0,0.70),rgba(180,60,0,0.55),transparent)'}}/>
+          <div style={{height:'1px',marginBottom:'1.2rem',background:`linear-gradient(90deg,transparent,rgba(200,80,0,0.55),${THEME.dividerColor},rgba(200,80,0,0.55),transparent)`}}/>
 
           {/* Error */}
           {error&&(
@@ -705,8 +901,8 @@ export default function Login(){
           <form onSubmit={handleSubmit} style={{display:'flex',flexDirection:'column',gap:'1rem'}}>
             <div>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'0.36rem'}}>
-                <label style={{fontFamily:'"Barlow",sans-serif',fontSize:'0.78rem',fontWeight:600,color:'#F0DDD8'}}>Team Name</label>
-                <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.52rem',color:'rgba(255,130,80,0.80)',letterSpacing:'0.08em'}}>IDENTIFIER</span>
+                <label style={{fontFamily:'"Barlow",sans-serif',fontSize:'0.78rem',fontWeight:600,color:THEME.labelColor}}>Team Name</label>
+                <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.52rem',color:THEME.tagColor,letterSpacing:'0.08em'}}>IDENTIFIER</span>
               </div>
               <input
                 className="hell-input"
@@ -718,8 +914,8 @@ export default function Login(){
             </div>
             <div>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'0.36rem'}}>
-                <label style={{fontFamily:'"Barlow",sans-serif',fontSize:'0.78rem',fontWeight:600,color:'#F0DDD8'}}>Password</label>
-                <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.52rem',color:'rgba(255,130,80,0.80)',letterSpacing:'0.08em'}}>ENCRYPTED</span>
+                <label style={{fontFamily:'"Barlow",sans-serif',fontSize:'0.78rem',fontWeight:600,color:THEME.labelColor}}>Password</label>
+                <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.52rem',color:THEME.tagColor,letterSpacing:'0.08em'}}>ENCRYPTED</span>
               </div>
               <input
                 className="hell-input"
@@ -743,7 +939,7 @@ export default function Login(){
 
           {/* Footer */}
           <div style={{marginTop:'1rem',paddingTop:'0.75rem',borderTop:'1px solid rgba(100,0,0,0.18)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.52rem',color:'rgba(220,180,160,0.65)',letterSpacing:'0.06em'}}>// v1.0 — stack depth: ∞</span>
+            <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.52rem',color:THEME.footerColor,letterSpacing:'0.06em'}}>// v1.0 — stack depth: ∞</span>
             <span style={{display:'flex',alignItems:'center',gap:'0.32rem'}}>
               <span style={{width:5,height:5,borderRadius:'50%',background:'#CC0000',boxShadow:'0 0 7px rgba(200,0,0,0.95)',animation:'blink 1.8s step-start infinite',display:'inline-block'}}/>
               <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.52rem',color:'rgba(255,100,70,0.88)',letterSpacing:'0.06em'}}>CONTEST LIVE</span>
