@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase';
 import { isAllowedFilePath } from '../utils/filePath';
+import { getFullGameState, getNextQuestion, submitAnswer as engineSubmitAnswer } from '../game/gameEngine';
 
 const BUCKET = process.env.SUPABASE_BUCKET_QUESTIONS?.trim() || 'question-assets';
 const SIGNED_URL_EXPIRES_SEC = 60;
@@ -9,9 +10,17 @@ export type GetQuestionFileResult =
   | { ok: false; status: 'not_found' | 'forbidden' | 'invalid_path' | 'storage_error' };
 
 export const gameService = {
-  getState: async () => ({}),
-  getQuestion: async () => null,
-  submitAnswer: async () => ({}),
+  async getState(participantId: number) {
+    return getFullGameState(participantId);
+  },
+
+  async getQuestion(nodeId: number, participantId: number) {
+    return getNextQuestion(nodeId, participantId);
+  },
+
+  async submitAnswer(participantId: number, questionId: number, answer: string) {
+    return engineSubmitAnswer(participantId, questionId, answer);
+  },
 
   async getQuestionFile(
     participantId: number,
