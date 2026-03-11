@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
@@ -34,6 +35,7 @@ function Ember({ left, delay, duration, size, drift }) {
 }
 
 export default function Login() {
+  const navigate = useNavigate()
   const [teamName, setTeamName] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -123,7 +125,7 @@ export default function Login() {
     try {
       await sleep(850)
       sessionStorage.setItem('teamName', tn)
-      window.location.assign('/landing')
+      navigate('/game')
     } finally {
       setLoading(false)
     }

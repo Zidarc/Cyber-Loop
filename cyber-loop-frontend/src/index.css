@@ -1,0 +1,122 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+@theme {
+  --color-hell-bg: #0B0B0F;
+  --color-hell-red: #8B0000;
+  --color-hell-orange: #FF6A00;
+  --color-hell-amber: #FFB300;
+  --color-hell-inactive: #4A4A4A;
+  --color-hell-locked: #2A2A2A;
+  --color-hell-solved: #00E676;
+  --color-hell-solved-glow: #29B6F6;
+  --color-hell-penalty: #B71C1C;
+  --color-hell-checkpoint: #FF8C00;
+
+  --font-heading: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* Base reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-hell-bg);
+  color: #e0e0e0;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Keyframe Animations ── */
+
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes redPulse {
+  0%, 100% { color: #ff4444; text-shadow: 0 0 8px rgba(255, 68, 68, 0.5); }
+  50% { color: #ff0000; text-shadow: 0 0 20px rgba(255, 0, 0, 0.8); }
+}
+
+@keyframes checkpointBurst {
+  0% { box-shadow: 0 0 10px #FF8C00, 0 0 20px #FF8C00; transform: scale(1); }
+  50% { box-shadow: 0 0 30px #FF8C00, 0 0 60px #FF6A00, 0 0 90px rgba(255,138,0,0.3); transform: scale(1.15); }
+  100% { box-shadow: 0 0 10px #FF8C00, 0 0 20px #FF8C00; transform: scale(1); }
+}
+
+@keyframes penaltyPulse {
+  0%, 100% { transform: scale(1) rotate(0deg); box-shadow: 0 0 10px #B71C1C; }
+  25% { transform: scale(1.03) rotate(0.5deg); }
+  50% { box-shadow: 0 0 25px #B71C1C, 0 0 50px rgba(183,28,28,0.3); }
+  75% { transform: scale(0.97) rotate(-0.5deg); }
+}
+
+@keyframes redFlash {
+  0% { background-color: rgba(183, 28, 28, 0.4); }
+  100% { background-color: transparent; }
+}
+
+@keyframes lightning {
+  0%, 100% { opacity: 0; }
+  5% { opacity: 0.8; }
+  10% { opacity: 0; }
+  15% { opacity: 0.6; }
+  20% { opacity: 0; }
+}
+
+@keyframes floatUp {
+  0% { transform: translateY(100vh); opacity: 0; }
+  10% { opacity: 0.3; }
+  90% { opacity: 0.1; }
+  100% { transform: translateY(-10vh); opacity: 0; }
+}
+
+@keyframes titleGlow {
+  0%, 100% {
+    text-shadow:
+      0 0 20px rgba(255, 179, 0, 0.5),
+      0 0 40px rgba(255, 106, 0, 0.3),
+      0 0 80px rgba(139, 0, 0, 0.2);
+  }
+  50% {
+    text-shadow:
+      0 0 30px rgba(255, 179, 0, 0.8),
+      0 0 60px rgba(255, 106, 0, 0.5),
+      0 0 120px rgba(139, 0, 0, 0.4),
+      0 0 160px rgba(139, 0, 0, 0.2);
+  }
+}
+
+/* ── React Flow Overrides ── */
+.react-flow__background {
+  background-color: var(--color-hell-bg) !important;
+}
+
+.react-flow__edge-path {
+  stroke: #333 !important;
+  stroke-width: 2 !important;
+}
+
+.react-flow__controls {
+  background: rgba(20, 20, 25, 0.9) !important;
+  border: 1px solid rgba(255, 179, 0, 0.2) !important;
+  border-radius: 8px !important;
+}
+
+.react-flow__controls-button {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 179, 0, 0.1) !important;
+  fill: #FFB300 !important;
+}
+
+.react-flow__controls-button:hover {
+  background: rgba(255, 179, 0, 0.1) !important;
+}
