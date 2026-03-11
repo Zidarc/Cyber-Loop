@@ -1,465 +1,428 @@
 import { useState, useEffect, useRef } from 'react'
+import Lightning from '../components/Lightning'
 
-/* ─── Countdown target — change this date for real contest ─── */
-const CONTEST_START = new Date(Date.now() + 12 * 60 * 1000) // 12 min from now for demo
-
-function getTimeLeft() {
-  const diff = CONTEST_START - Date.now()
-  if (diff <= 0) return { h: '00', m: '00', s: '00', over: true }
-  const h = Math.floor(diff / 3600000)
-  const m = Math.floor((diff % 3600000) / 60000)
-  const s = Math.floor((diff % 60000) / 1000)
-  return {
-    h: String(h).padStart(2, '0'),
-    m: String(m).padStart(2, '0'),
-    s: String(s).padStart(2, '0'),
-    over: false,
-  }
+/* ══════════════════════════════════════════
+   THEME — matches Login
+══════════════════════════════════════════ */
+const T = {
+  bg:         '#18171a',
+  accent:     '#CC3300',
+  accentHi:   '#FF6600',
+  gold:       '#FFAA00',
+  label:      '#DDD0C8',
+  muted:      'rgba(200,170,150,0.45)',
+  // ── BACKEND: swap this path for the real PDF ──
+  rulebookPdf: '/rulebook.pdf',
+  // ── BACKEND: swap for real video src ──
+  videoBg:    '/st-bg.mp4',
 }
 
-/* ─── Canvas: same volcano atmosphere as Login ─── */
-function SceneCanvas() {
+/* ══════════════════════════════════════════
+   EMBER CANVAS — same system as Login
+══════════════════════════════════════════ */
+const EMBER_PALETTE = [[255,90,0],[235,55,0],[210,35,0],[255,130,20],[185,30,0],[140,10,0]]
+
+function EmberCanvas() {
   const ref = useRef(null)
   useEffect(() => {
-    const canvas = ref.current
-    if (!canvas) return
+    const canvas = ref.current; if (!canvas) return
     const ctx = canvas.getContext('2d')
-    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight }
-    resize()
-    window.addEventListener('resize', resize)
+    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight }
+    resize(); window.addEventListener('resize', resize)
 
-    const PALETTE = [[255,80,0],[230,50,0],[200,30,0],[255,120,0],[180,20,0],[220,60,0],[255,160,40]]
-    const EMBER_COUNT = 90
-
-    function spawnEmber(W, H) {
-      const rgb = PALETTE[Math.floor(Math.random() * PALETTE.length)]
-      const size = 1.2 + Math.random() * 2.8
-      const travel = H * (0.48 + Math.random() * 0.08)
-      return { x: Math.random()*W, y: H, size, vx: (Math.random()-0.5)*0.35, vy: -(0.28+Math.random()*0.48), travel, dist: 0, rgb, wobble: Math.random()*Math.PI*2, wobbleSpd: 0.012+Math.random()*0.018 }
+    function spawnEmber() {
+      const rgb = EMBER_PALETTE[Math.floor(Math.random()*EMBER_PALETTE.length)]
+      return {
+        x: Math.random()*canvas.width, y: canvas.height + 10,
+        vx: (Math.random()-.5)*.30, vy: -(.18+Math.random()*.30),
+        size: .7+Math.random()*2.0,
+        travel: canvas.height*(.35+Math.random()*.20),
+        dist:0, rgb, wobble:Math.random()*Math.PI*2, wSpd:.007+Math.random()*.010,
+      }
+    }
+    function spawnSpore() {
+      const side = Math.random()<.5?-1:1
+      return {
+        x: side<0?-8:canvas.width+8,
+        y: canvas.height*.05+Math.random()*canvas.height*.9,
+        r:.3+Math.random()*1.2, vx:side*(.05+Math.random()*.14),
+        vy:(Math.random()-.5)*.05, alpha:.06+Math.random()*.25,
+        wobble:Math.random()*Math.PI*2, wSpd:.004+Math.random()*.006,
+        pulse:Math.random()*Math.PI*2, pSpd:.010+Math.random()*.018,
+      }
     }
 
-    const W0 = canvas.width, H0 = canvas.height
-    const embers = Array.from({ length: EMBER_COUNT }, (_, i) => {
-      const e = spawnEmber(W0, H0)
-      e._delay = Math.floor(i * (120 / EMBER_COUNT))
-      e._ticks = 0; e.dist = e.travel
-      return e
-    })
+    const embers = Array.from({length:55},()=>{ const e=spawnEmber(); e.y=Math.random()*canvas.height; return e })
+    const spores = Array.from({length:30},()=>{ const s=spawnSpore(); s.x=Math.random()*canvas.width; return s })
 
-    let t = 0, rafId, paused = false
-    const onVis = () => { paused = document.hidden }
-    document.addEventListener('visibilitychange', onVis)
+    let raf, paused=false
+    document.addEventListener('visibilitychange',()=>{ paused=document.hidden })
 
-    function render() {
-      rafId = requestAnimationFrame(render)
-      if (paused) return
-      t++
-      const W = canvas.width, H = canvas.height
-      ctx.clearRect(0, 0, W, H)
+    function draw() {
+      raf=requestAnimationFrame(draw); if(paused) return
+      const W=canvas.width,H=canvas.height
+      ctx.clearRect(0,0,W,H)
 
-      // Vignette
-      const bv = 0.52 + Math.sin(t * 0.016) * 0.06
-      const vig = ctx.createRadialGradient(W/2, H/2, H*0.15, W/2, H/2, H*0.9)
-      vig.addColorStop(0, 'rgba(0,0,0,0)')
-      vig.addColorStop(0.5, `rgba(0,0,0,${bv*0.28})`)
-      vig.addColorStop(1, `rgba(0,0,0,${bv})`)
-      ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H)
-
-      // Lava glow
-      const g1 = 0.28 + Math.sin(t*0.035)*0.09
-      const g2 = 0.15 + Math.sin(t*0.08+1.1)*0.07
-      const g3 = 0.12 + Math.sin(t*0.17+2.5)*0.05
-      const lg = ctx.createLinearGradient(0, H*0.65, 0, H)
-      lg.addColorStop(0, 'rgba(0,0,0,0)')
-      lg.addColorStop(0.5, `rgba(140,35,0,${g1*0.4})`)
-      lg.addColorStop(1, `rgba(230,65,0,${g1})`)
-      ctx.fillStyle = lg; ctx.fillRect(0, H*0.65, W, H*0.35)
-      const hc = ctx.createRadialGradient(W*0.5, H, 0, W*0.5, H, W*0.5)
-      hc.addColorStop(0, `rgba(255,100,0,${g2})`)
-      hc.addColorStop(0.4, `rgba(180,50,0,${g2*0.5})`)
-      hc.addColorStop(1, 'rgba(0,0,0,0)')
-      ctx.fillStyle = hc; ctx.fillRect(0, H*0.6, W, H*0.4)
-      ;[0, W].forEach(cx => {
-        const cg = ctx.createRadialGradient(cx, H, 0, cx, H, W*0.25)
-        cg.addColorStop(0, `rgba(200,55,0,${g3*1.1})`)
-        cg.addColorStop(0.5, `rgba(140,30,0,${g3*0.4})`)
-        cg.addColorStop(1, 'rgba(0,0,0,0)')
-        ctx.fillStyle = cg; ctx.fillRect(0, 0, W, H)
-      })
-
-      // Embers
-      for (let i = 0; i < embers.length; i++) {
-        const e = embers[i]
-        if (e._ticks < e._delay) { e._ticks++; continue }
-        if (e.dist >= e.travel) { Object.assign(e, spawnEmber(W, H)); e._delay=0; e._ticks=0; continue }
-        e.wobble += e.wobbleSpd
-        e.x += e.vx + Math.sin(e.wobble)*0.10
-        e.y += e.vy; e.dist -= e.vy
-        const prog = e.dist / e.travel
-        const alpha = prog < 0.08 ? prog/0.08 : prog > 0.65 ? Math.pow(1-(prog-0.65)/0.35,1.6) : 1
-        if (alpha < 0.015) continue
-        const [r, g, b] = e.rgb
-        const bodyR = e.size * (1 - prog*0.3)
-        ctx.save(); ctx.globalAlpha = alpha
-        ctx.translate(e.x, e.y); ctx.rotate(e.wobble*0.5)
-        const s = bodyR
+      for(const s of spores){
+        s.x+=s.vx; s.y+=s.vy; s.wobble+=s.wSpd; s.pulse+=s.pSpd; s.y+=Math.sin(s.wobble)*.04
+        if((s.vx>0&&s.x>W+12)||(s.vx<0&&s.x<-12)) Object.assign(s,spawnSpore())
+        const a=s.alpha*(.6+Math.sin(s.pulse)*.28)
+        ctx.save(); ctx.globalAlpha=a
+        const sg=ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,s.r*2.2)
+        sg.addColorStop(0,'rgba(255,100,0,1)'); sg.addColorStop(.5,'rgba(153,60,0,.5)'); sg.addColorStop(1,'rgba(0,0,0,0)')
+        ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(s.x,s.y,s.r*2.2,0,Math.PI*2); ctx.fill(); ctx.restore()
+      }
+      for(const e of embers){
+        if(e.dist>=e.travel){Object.assign(e,spawnEmber());continue}
+        e.wobble+=e.wSpd; e.x+=e.vx+Math.sin(e.wobble)*.07; e.y+=e.vy; e.dist-=e.vy
+        const prog=e.dist/e.travel
+        const alpha=prog<.12?prog/.12:prog>.55?Math.pow(1-(prog-.55)/.45,1.8):1
+        if(alpha<.02) continue
+        const [r,g]=e.rgb; const s=e.size*(1-prog*.25)
+        ctx.save(); ctx.globalAlpha=alpha; ctx.translate(e.x,e.y); ctx.rotate(e.wobble*.4)
         ctx.beginPath()
-        ctx.moveTo(s*0.0, -s*1.1); ctx.lineTo(s*0.7, -s*0.6)
-        ctx.lineTo(s*1.0, s*0.1);  ctx.lineTo(s*0.5, s*0.9)
-        ctx.lineTo(-s*0.2, s*1.0); ctx.lineTo(-s*0.9, s*0.3)
-        ctx.lineTo(-s*0.8, -s*0.7); ctx.closePath()
-        ctx.fillStyle = `rgba(${Math.floor(r*0.28)},${Math.floor(g*0.08)},0,1)`; ctx.fill()
+        ctx.moveTo(0,-s*1.1); ctx.lineTo(s*.7,-s*.5); ctx.lineTo(s*.9,s*.2)
+        ctx.lineTo(s*.4,s*.9); ctx.lineTo(-s*.3,s*.9); ctx.lineTo(-s*.9,s*.2); ctx.lineTo(-s*.7,-s*.5); ctx.closePath()
+        ctx.fillStyle=`rgba(${r*.25|0},0,0,1)`; ctx.fill()
         ctx.save(); ctx.clip()
-        const inner = ctx.createRadialGradient(s*0.05,-s*0.1,0,s*0.05,-s*0.1,s*0.85)
-        inner.addColorStop(0, 'rgba(255,230,160,1)')
-        inner.addColorStop(0.3, `rgba(${r},${Math.max(g,30)},0,1)`)
-        inner.addColorStop(0.7, `rgba(${Math.floor(r*0.55)},0,0,1)`)
-        inner.addColorStop(1, 'rgba(0,0,0,0)')
-        ctx.fillStyle = inner; ctx.fill()
-        ctx.restore(); ctx.restore()
+        const ig=ctx.createRadialGradient(0,-s*.1,0,0,-s*.1,s*.8)
+        ig.addColorStop(0,'rgba(255,200,120,1)'); ig.addColorStop(.3,`rgba(${r},${Math.max(g,8)},0,1)`)
+        ig.addColorStop(.75,`rgba(${r*.45|0},0,0,1)`); ig.addColorStop(1,'rgba(0,0,0,0)')
+        ctx.fillStyle=ig; ctx.fill(); ctx.restore(); ctx.restore()
       }
     }
-    rafId = requestAnimationFrame(render)
-    return () => { cancelAnimationFrame(rafId); window.removeEventListener('resize', resize); document.removeEventListener('visibilitychange', onVis) }
-  }, [])
-  return <canvas ref={ref} style={{ position:'fixed', inset:0, width:'100%', height:'100%', zIndex:1, pointerEvents:'none' }} />
+    raf=requestAnimationFrame(draw)
+    return()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize',resize) }
+  },[])
+  return <canvas ref={ref} style={{position:'fixed',inset:0,width:'100%',height:'100%',zIndex:2,pointerEvents:'none'}}/>
 }
 
-/* ─── Flip clock digit ─── */
-function FlipDigit({ value, label }) {
-  const [display, setDisplay] = useState(value)
-  const [flip, setFlip]       = useState(false)
-  const prev = useRef(value)
-
-  useEffect(() => {
-    if (value !== prev.current) {
-      setFlip(true)
-      setTimeout(() => { setDisplay(value); setFlip(false) }, 280)
-      prev.current = value
+/* ══════════════════════════════════════════
+   LIGHTNING BG — same as Login
+══════════════════════════════════════════ */
+function LightningBG() {
+  const [bolt,setBolt]=useState(null)
+  useEffect(()=>{
+    const SEQ=['left','centre','right']; let idx=0; const ts=[]
+    const fire=()=>{
+      setBolt(SEQ[idx++%3])
+      ts.push(setTimeout(()=>{ setBolt(null); ts.push(setTimeout(fire,8000)) },700))
     }
-  }, [value])
-
-  return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'0.5rem' }}>
-      <div style={{ position:'relative', width:'72px', height:'88px' }}>
-        {/* Back plate */}
-        <div style={{ position:'absolute', inset:0, background:'rgba(12,5,0,0.9)', border:'1px solid rgba(200,80,0,0.3)', borderRadius:'8px', boxShadow:'0 8px 32px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,120,0,0.1)' }} />
-        {/* Center line */}
-        <div style={{ position:'absolute', top:'50%', left:0, right:0, height:'1px', background:'rgba(0,0,0,0.8)', zIndex:3 }} />
-        {/* Digit */}
-        <div style={{
-          position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center',
-          fontFamily:'"Cinzel",serif', fontSize:'2.8rem', fontWeight:900,
-          background:'linear-gradient(180deg,#FFD060 0%,#FF8C00 50%,#C04000 100%)',
-          WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text',
-          transform: flip ? 'scaleY(0.1)' : 'scaleY(1)',
-          transition: flip ? 'transform 0.14s ease-in' : 'transform 0.14s ease-out',
-          zIndex:2,
-        }}>{display}</div>
-        {/* Subtle gloss top half */}
-        <div style={{ position:'absolute', top:0, left:0, right:0, height:'50%', background:'rgba(255,255,255,0.03)', borderRadius:'8px 8px 0 0', pointerEvents:'none', zIndex:4 }} />
-      </div>
-      <span style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:'0.55rem', letterSpacing:'0.2em', color:'rgba(255,120,0,0.4)', textTransform:'uppercase' }}>{label}</span>
+    ts.push(setTimeout(fire,3000))
+    return()=>ts.forEach(clearTimeout)
+  },[])
+  const cfgs={
+    left:  {hue:18, xOffset:-.75,speed:1.0,intensity:2.6,size:1.1},
+    centre:{hue:8,  xOffset:0,   speed:.95,intensity:3.0,size:1.3},
+    right: {hue:355,xOffset:.75, speed:.85,intensity:2.4,size:1.0},
+  }
+  return bolt?(
+    <div style={{position:'fixed',inset:0,zIndex:1,mixBlendMode:'screen',pointerEvents:'none',animation:'bIn .12s ease-out'}}>
+      <style>{`@keyframes bIn{from{opacity:0}to{opacity:1}}`}</style>
+      <Lightning {...cfgs[bolt]}/>
     </div>
-  )
+  ):null
 }
 
-/* ─── Rulebook section ─── */
-const RULES = [
-  {
-    title: '// GRAPH STRUCTURE',
-    body: 'The game is a node-based puzzle graph. Each node is a question. Only the Start node is unlocked initially. Solve a node to unlock its connected neighbors and progress forward.',
-  },
-  {
-    title: '// CHECKPOINTS',
-    body: 'Certain nodes are checkpoints. Reach one and it becomes your respawn point. A wrong answer before any checkpoint sends you back to Start. After a checkpoint, wrong answers send you back to your last checkpoint — all progress after it resets.',
-  },
-  {
-    title: '// THE LOOP — PENALTY SYSTEM',
-    body: 'Every wrong answer adds a penalty node to your path. Up to 7 special penalty nodes exist — each harder than the main path. The Final Node only unlocks after you\'ve solved base_required + mistakes_made nodes. Wrong answers literally make the game longer.',
-  },
-  {
-    title: '// QUESTION RULES',
-    body: 'Questions are dynamic — no immediate repeats after a wrong answer. Nodes solved correctly after a checkpoint never reappear. Before a checkpoint, previously seen questions may resurface — but always reshuffled, never the one you just failed.',
-  },
-  {
-    title: '// SCORING',
-    body: 'Scoreboard ranks by: (1) highest correct solves, then (2) fewest penalties accumulated. Speed may be a tiebreaker. Play clean — every mistake costs you more than time.',
-  },
-]
-
-function Rulebook() {
-  const [open, setOpen] = useState(false)
-  const [openIdx, setOpenIdx] = useState(null)
+/* ══════════════════════════════════════════
+   RULEBOOK MODAL
+══════════════════════════════════════════ */
+function RulebookModal({ onClose }) {
+  useEffect(()=>{
+    const onKey=e=>{ if(e.key==='Escape') onClose() }
+    window.addEventListener('keydown',onKey)
+    return()=>window.removeEventListener('keydown',onKey)
+  },[])
 
   return (
-    <div style={{ width:'100%', maxWidth:'680px', margin:'0 auto' }}>
-      {/* Header toggle */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          width:'100%', background:'rgba(8,3,0,0.55)', border:'1px solid rgba(200,80,0,0.35)',
-          borderRadius: open ? '10px 10px 0 0' : '10px',
-          padding:'1rem 1.4rem', cursor:'pointer',
-          display:'flex', alignItems:'center', justifyContent:'space-between',
-          backdropFilter:'blur(6px)', transition:'border-radius 0.2s',
-        }}
-      >
-        <span style={{ fontFamily:'"Cinzel",serif', fontSize:'0.85rem', fontWeight:700, letterSpacing:'0.15em', color:'rgba(255,180,80,0.9)' }}>
-          RULEBOOK — THE LOOP
-        </span>
-        <span style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:'0.7rem', color:'rgba(255,120,0,0.6)', transition:'transform 0.3s', display:'inline-block', transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
-      </button>
-
-      {/* Rules list */}
+    <div
+      onClick={e=>{ if(e.target===e.currentTarget) onClose() }}
+      style={{
+        position:'fixed',inset:0,zIndex:100,
+        background:'rgba(0,0,0,0.75)',
+        backdropFilter:'blur(8px)',
+        display:'flex',alignItems:'center',justifyContent:'center',
+        padding:'20px',
+        animation:'fadeIn .2s ease-out',
+      }}
+    >
+      <style>{`@keyframes fadeIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}`}</style>
       <div style={{
-        maxHeight: open ? '800px' : '0px',
-        overflow:'hidden', transition:'max-height 0.5s cubic-bezier(0.4,0,0.2,1)',
-        background:'rgba(6,2,0,0.6)', border: open ? '1px solid rgba(200,80,0,0.35)' : 'none',
-        borderTop:'none', borderRadius:'0 0 10px 10px', backdropFilter:'blur(6px)',
+        width:'min(96vw,860px)', height:'min(90vh,680px)',
+        background:'rgba(18,15,16,0.95)',
+        border:'1px solid rgba(255,255,255,0.09)',
+        borderRadius:14,
+        display:'flex',flexDirection:'column',
+        overflow:'hidden',
+        boxShadow:'0 32px 80px rgba(0,0,0,0.75), 0 0 60px rgba(160,40,0,0.10)',
       }}>
-        {RULES.map((rule, i) => (
-          <div key={i} style={{ borderBottom: i < RULES.length-1 ? '1px solid rgba(150,50,0,0.2)' : 'none' }}>
-            <button
-              onClick={() => setOpenIdx(openIdx === i ? null : i)}
+        {/* modal header */}
+        <div style={{
+          display:'flex',alignItems:'center',justifyContent:'space-between',
+          padding:'14px 20px',
+          borderBottom:'1px solid rgba(255,255,255,0.07)',
+          background:'rgba(255,255,255,0.03)',
+        }}>
+          <span style={{fontFamily:'"Cinzel",serif',fontSize:'.85rem',fontWeight:700,letterSpacing:'.12em',color:'#DDD0C8'}}>
+            RULEBOOK
+          </span>
+          <div style={{display:'flex',gap:10,alignItems:'center'}}>
+            {/* download button */}
+            <a
+              href={T.rulebookPdf} download
               style={{
-                width:'100%', background:'transparent', border:'none', cursor:'pointer',
-                padding:'0.9rem 1.4rem', display:'flex', alignItems:'center', justifyContent:'space-between',
+                fontFamily:'"Share Tech Mono",monospace',fontSize:'.68rem',
+                color:'rgba(220,100,40,0.80)',letterSpacing:'.06em',
+                textDecoration:'none',padding:'5px 12px',
+                border:'1px solid rgba(200,70,0,0.30)',borderRadius:6,
+                transition:'all .15s',
               }}
+              onMouseEnter={e=>{ e.target.style.background='rgba(200,70,0,0.12)'; e.target.style.color='rgba(255,130,60,1)' }}
+              onMouseLeave={e=>{ e.target.style.background='transparent'; e.target.style.color='rgba(220,100,40,0.80)' }}
             >
-              <span style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:'0.72rem', letterSpacing:'0.08em', color:'rgba(255,140,0,0.75)' }}>
-                {rule.title}
-              </span>
-              <span style={{ color:'rgba(255,100,0,0.4)', fontSize:'0.65rem', transition:'transform 0.2s', display:'inline-block', transform: openIdx===i?'rotate(90deg)':'rotate(0deg)' }}>▶</span>
-            </button>
-            <div style={{
-              maxHeight: openIdx === i ? '300px' : '0px',
-              overflow:'hidden', transition:'max-height 0.3s ease',
-              padding: openIdx === i ? '0 1.4rem 1rem' : '0 1.4rem',
-            }}>
-              <p style={{ fontFamily:'"Barlow",sans-serif', fontSize:'0.88rem', lineHeight:1.7, color:'rgba(240,210,170,0.7)', margin:0 }}>
-                {rule.body}
-              </p>
-            </div>
+              ↓ DOWNLOAD
+            </a>
+            <button
+              onClick={onClose}
+              style={{
+                background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.10)',
+                borderRadius:6,color:'rgba(200,180,170,0.70)',width:28,height:28,
+                fontSize:'1rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
+                transition:'background .15s',
+              }}
+              onMouseEnter={e=>e.target.style.background='rgba(255,255,255,0.12)'}
+              onMouseLeave={e=>e.target.style.background='rgba(255,255,255,0.06)'}
+            >×</button>
           </div>
-        ))}
+        </div>
+        {/* PDF embed — backend dev sets T.rulebookPdf */}
+        <iframe
+          src={T.rulebookPdf}
+          style={{flex:1,border:'none',background:'#111'}}
+          title="Rulebook"
+        />
       </div>
     </div>
   )
 }
 
-/* ─── Main Landing Page ─── */
+/* ══════════════════════════════════════════
+   LANDING PAGE
+══════════════════════════════════════════ */
 export default function Landing() {
-  const teamName = sessionStorage.getItem('teamName') || 'TEAM ALPHA'
-  const [time, setTime]         = useState(getTimeLeft())
-  const [glitch, setGlitch]     = useState(false)
-  const [videoReady, setVideoReady] = useState(false)
-  const scrollRef               = useRef(null)
-  const lastSnap                = useRef(0)
+  const [showRules, setShowRules] = useState(false)
+  const teamName = sessionStorage.getItem('teamName') || 'Team'
+  const videoRef = useRef(null)
 
-  // Live countdown
-  useEffect(() => {
-    const id = setInterval(() => setTime(getTimeLeft()), 1000)
-    return () => clearInterval(id)
-  }, [])
-
-  // Infinite scroll illusion
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    const onScroll = () => {
-      const mid = el.scrollHeight / 2
-      if (el.scrollTop > mid && Date.now() - lastSnap.current > 800) {
-        lastSnap.current = Date.now()
-        setGlitch(true)
-        setTimeout(() => setGlitch(false), 350)
-        el.scrollTop = el.scrollTop - mid
-      }
-    }
-    el.addEventListener('scroll', onScroll)
-    return () => el.removeEventListener('scroll', onScroll)
-  }, [])
-
-  const contestLive = time.over
+  useEffect(()=>{
+    // ensure video plays muted autoplay
+    if(videoRef.current){ videoRef.current.muted=true; videoRef.current.play().catch(()=>{}) }
+  },[])
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'#0a0200', overflow:'hidden', userSelect:'none' }}>
+    <div style={{minHeight:'100vh',position:'relative',overflow:'hidden',display:'flex',flexDirection:'column'}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
-        * { user-select:none; -webkit-user-select:none; box-sizing:border-box; margin:0; padding:0; }
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Share+Tech+Mono&family=Barlow:wght@400;500;600&display=swap');
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+        html,body{background:${T.bg}}
 
-        @keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
-        @keyframes glitchFlash {
-          0%   { opacity:1; transform:translate(0); filter:none; }
-          20%  { opacity:0.2; transform:translate(-4px,0); filter:hue-rotate(90deg); }
-          40%  { opacity:1; transform:translate(3px,0); filter:saturate(3); }
-          60%  { opacity:0.3; transform:translate(0,-2px); filter:hue-rotate(-90deg); }
-          80%  { opacity:1; transform:translate(2px,0); filter:none; }
-          100% { opacity:1; transform:translate(0); filter:none; }
+        @keyframes spin   {to{transform:rotate(360deg)}}
+        @keyframes blink  {0%,49%{opacity:1}50%,100%{opacity:0}}
+        @keyframes fadeUp {from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes btnPulse{
+          0%,100%{box-shadow:inset 0 1px 0 rgba(255,180,100,0.18),0 6px 24px rgba(180,40,0,0.40)}
+          50%    {box-shadow:inset 0 1px 0 rgba(255,180,100,0.24),0 6px 36px rgba(220,65,0,0.58)}
         }
-        @keyframes shimmer {
-          0%   { background-position:-200% center; }
-          100% { background-position:200% center; }
-        }
-        @keyframes pulseGlow {
-          0%,100% { box-shadow:0 0 30px rgba(255,120,0,0.3), 0 4px 20px rgba(0,0,0,0.6); }
-          50%      { box-shadow:0 0 60px rgba(255,150,0,0.55), 0 4px 20px rgba(0,0,0,0.6), 0 0 100px rgba(200,80,0,0.2); }
-        }
-        @keyframes btnSweep { 0%{left:-80%} 100%{left:140%} }
-        @keyframes navFadeIn { from{opacity:0;transform:translateY(-12px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes heroFadeIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes sectionFadeIn { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes sweep{0%{left:-70%}100%{left:130%}}
+        @keyframes titleFlicker{0%,88%,100%{opacity:1}89%{opacity:.5}90%{opacity:1}94%{opacity:.65}95%{opacity:1}}
+        @keyframes glowPulse{0%,100%{text-shadow:0 0 12px rgba(220,80,0,0.55),0 0 30px rgba(180,40,0,0.30)}50%{text-shadow:0 0 20px rgba(255,100,0,0.75),0 0 50px rgba(200,55,0,0.45)}}
 
-        .glitch-page { animation: glitchFlash 0.35s steps(1) forwards; }
+        .enter-btn{
+          padding:18px 56px;border:none;border-radius:12px;cursor:pointer;
+          font-family:'Cinzel',serif;font-size:1.0rem;font-weight:700;
+          letter-spacing:.28em;text-transform:uppercase;
+          background:linear-gradient(160deg,#D94400 0%,#A01800 45%,#6A0000 100%);
+          color:#FFE8D0;position:relative;overflow:hidden;
+          box-shadow:inset 0 1px 0 rgba(255,180,100,0.18),inset 0 -1px 0 rgba(0,0,0,0.30);
+          animation:btnPulse 3.5s ease-in-out infinite;
+          transition:filter .18s,transform .14s;
+        }
+        .enter-btn::before{
+          content:'';position:absolute;inset:0;border-radius:12px;
+          background:linear-gradient(180deg,rgba(255,150,80,0.08) 0%,transparent 50%);
+          pointer-events:none;
+        }
+        .enter-btn::after{
+          content:'';position:absolute;top:0;left:-70%;width:45%;height:100%;
+          background:linear-gradient(90deg,transparent,rgba(255,200,150,0.12),transparent);
+          transform:skewX(-16deg);animation:sweep 4s ease-in-out infinite;
+        }
+        .enter-btn:hover{filter:brightness(1.14);transform:translateY(-3px) scale(1.02)}
+        .enter-btn:active{transform:translateY(0) scale(1);filter:brightness(.96)}
 
-        .nav-btn {
-          background:transparent; border:1px solid rgba(200,80,0,0.3);
-          border-radius:6px; padding:7px 16px; cursor:pointer;
-          fontFamily:'Cinzel',serif; font-size:0.72rem; font-weight:700;
-          letter-spacing:0.12em; color:rgba(240,200,140,0.75);
-          transition:all 0.2s; font-family:'Cinzel',serif;
+        .info-btn{
+          width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,0.14);
+          background:rgba(255,255,255,0.06);color:rgba(220,190,170,0.75);
+          font-size:.85rem;font-family:'Barlow',sans-serif;font-weight:600;
+          cursor:pointer;display:flex;align-items:center;justify-content:center;
+          transition:all .18s;backdrop-filter:blur(8px);
         }
-        .nav-btn:hover { background:rgba(255,100,0,0.12); border-color:rgba(255,130,0,0.6); color:#F5ECD7; }
+        .info-btn:hover{background:rgba(200,70,0,0.20);border-color:rgba(220,80,0,0.40);color:#FFE0C0}
 
-        .start-btn-live {
-          background:linear-gradient(180deg,#FF9500 0%,#E06200 45%,#961800 100%);
-          color:#fff; border:none; cursor:pointer;
-          animation:pulseGlow 2.5s ease-in-out infinite;
-          position:relative; overflow:hidden;
+        .nav-logout{
+          font-family:'Share Tech Mono',monospace;font-size:.68rem;letter-spacing:.08em;
+          color:rgba(200,160,140,0.50);background:none;border:1px solid rgba(160,50,0,0.22);
+          border-radius:6px;padding:6px 14px;cursor:pointer;transition:all .15s;
         }
-        .start-btn-live::after {
-          content:''; position:absolute; top:0; left:-80%; width:55%; height:100%;
-          background:linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent);
-          transform:skewX(-18deg); animation:btnSweep 3s ease-in-out infinite;
-        }
-        .start-btn-live:hover { filter:brightness(1.1); transform:translateY(-2px); }
-        .start-btn-disabled {
-          background:rgba(255,255,255,0.04); color:rgba(240,200,150,0.2);
-          cursor:not-allowed; border:1px solid rgba(100,40,0,0.2);
-        }
-
-        .section-card {
-          background:rgba(8,3,0,0.45); border:1px solid rgba(200,80,0,0.25);
-          border-radius:12px; backdrop-filter:blur(6px);
-          padding:2rem 2rem;
-        }
+        .nav-logout:hover{color:rgba(230,180,140,0.85);border-color:rgba(200,70,0,0.45);background:rgba(180,50,0,0.10)}
       `}</style>
 
-      {/* BG video */}
-      <video autoPlay loop muted playsInline onCanPlay={() => setVideoReady(true)}
-        style={{ position:'fixed', inset:0, width:'100%', height:'100%', objectFit:'cover', zIndex:0, opacity: videoReady?0.78:0, transition:'opacity 1.2s ease' }}>
-        <source src="/lava-bg.mp4" type="video/mp4" />
-      </video>
+      {/* ── BG VIDEO ── */}
+      <video
+        ref={videoRef}
+        src={T.videoBg}
+        loop muted playsInline autoPlay
+        style={{
+          position:'fixed',inset:0,width:'100%',height:'100%',
+          objectFit:'cover',zIndex:0,
+          filter:'brightness(0.30) saturate(0.7)',
+        }}
+      />
+      {/* dark overlay over video */}
+      <div style={{position:'fixed',inset:0,zIndex:1,background:'rgba(15,12,14,0.55)',pointerEvents:'none'}}/>
+      {/* edge bleed — subtle red corners */}
+      <div style={{
+        position:'fixed',inset:0,zIndex:1,pointerEvents:'none',
+        background:'radial-gradient(ellipse at 0% 0%,rgba(100,5,0,0.18) 0%,transparent 40%), radial-gradient(ellipse at 100% 100%,rgba(90,5,0,0.15) 0%,transparent 38%)',
+      }}/>
 
-      <SceneCanvas />
-
-      {/* Glitch overlay */}
-      {glitch && <div style={{ position:'fixed', inset:0, zIndex:99, pointerEvents:'none', background:'rgba(255,80,0,0.06)', mixBlendMode:'screen', animation:'glitchFlash 0.35s steps(1) forwards' }} />}
+      <EmberCanvas/>
+      <LightningBG/>
 
       {/* ── NAVBAR ── */}
       <nav style={{
-        position:'fixed', top:0, left:0, right:0, zIndex:50,
-        background:'rgba(6,2,0,0.72)', borderBottom:'1px solid rgba(200,80,0,0.2)',
-        backdropFilter:'blur(10px)', padding:'0 2rem', height:'56px',
-        display:'flex', alignItems:'center', justifyContent:'space-between',
-        animation:'navFadeIn 0.6s ease both',
+        position:'fixed',top:0,left:0,right:0,zIndex:50,
+        display:'flex',alignItems:'center',justifyContent:'space-between',
+        padding:'14px 28px',
+        background:'rgba(12,10,12,0.55)',
+        borderBottom:'1px solid rgba(255,255,255,0.06)',
+        backdropFilter:'blur(16px)',
+        WebkitBackdropFilter:'blur(16px)',
       }}>
-        <span style={{ fontFamily:'"Cinzel",serif', fontSize:'0.85rem', fontWeight:900, letterSpacing:'0.12em', background:'linear-gradient(90deg,#FFD060,#FF8C00)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>
-          RECURSION HELL
-        </span>
-        <div style={{ display:'flex', alignItems:'center', gap:'0.6rem' }}>
-          <span style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:'0.65rem', color:'rgba(255,160,60,0.6)', marginRight:'0.6rem', letterSpacing:'0.08em' }}>
-            {teamName.toUpperCase()}
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span style={{
+            width:7,height:7,borderRadius:'50%',
+            background:'#FF4400',boxShadow:'0 0 6px rgba(255,55,0,0.9)',
+            animation:'blink 2s step-start infinite',display:'inline-block',
+          }}/>
+          <span style={{
+            fontFamily:'"Cinzel",serif',fontSize:'.75rem',fontWeight:700,
+            letterSpacing:'.14em',color:'rgba(200,80,40,0.80)',
+          }}>RECURSION HELL</span>
+        </div>
+
+        <div style={{display:'flex',alignItems:'center',gap:16}}>
+          <span style={{
+            fontFamily:'"Share Tech Mono",monospace',fontSize:'.72rem',
+            letterSpacing:'.08em',color:T.label,
+          }}>
+            {teamName}
           </span>
-          <button className="nav-btn" onClick={() => window.location.assign('/scoreboard')}>SCOREBOARD</button>
-          <button className="nav-btn" onClick={() => window.location.assign('/game')}>GAME</button>
-          <button className="nav-btn" onClick={() => { sessionStorage.clear(); window.location.assign('/') }}
-            style={{ borderColor:'rgba(180,30,0,0.4)', color:'rgba(255,100,80,0.6)' }}>
+          <a href="/scoreboard" style={{
+            fontFamily:'"Share Tech Mono",monospace',fontSize:'.68rem',letterSpacing:'.08em',
+            color:'rgba(200,160,140,0.55)',textDecoration:'none',
+            border:'1px solid rgba(160,50,0,0.22)',borderRadius:6,padding:'6px 14px',
+            transition:'all .15s',
+          }}
+          onMouseEnter={e=>{ e.target.style.color='rgba(230,180,140,0.85)'; e.target.style.borderColor='rgba(200,70,0,0.45)'; e.target.style.background='rgba(180,50,0,0.10)' }}
+          onMouseLeave={e=>{ e.target.style.color='rgba(200,160,140,0.55)'; e.target.style.borderColor='rgba(160,50,0,0.22)'; e.target.style.background='transparent' }}
+          >SCOREBOARD</a>
+          <button className="nav-logout" onClick={()=>{ sessionStorage.clear(); window.location.assign('/') }}>
             LOGOUT
           </button>
         </div>
       </nav>
 
-      {/* ── SCROLLABLE CONTENT ── */}
-      <div ref={scrollRef} style={{ position:'absolute', inset:0, overflowY:'auto', zIndex:10, paddingTop:'56px' }}>
-        {/* Render content twice for infinite loop illusion */}
-        {[0, 1].map(pass => (
-          <div key={pass}>
-            {/* ── HERO ── */}
-            <section style={{ minHeight:'100vh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'4rem 2rem 2rem', animation: pass===0 ? 'heroFadeIn 0.9s 0.2s ease both' : 'none' }}>
-              <p style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:'0.65rem', letterSpacing:'0.35em', color:'rgba(240,200,150,0.4)', marginBottom:'1rem', textTransform:'uppercase' }}>
-                // welcome, {teamName.toLowerCase()}
-              </p>
-              <h1 style={{
-                fontFamily:'"Cinzel",serif', fontSize:'clamp(2rem,6vw,4rem)', fontWeight:900,
-                letterSpacing:'0.06em', textAlign:'center', lineHeight:1.1, marginBottom:'1rem',
-                background:'linear-gradient(180deg,#FFD060 0%,#FF8C00 40%,#FF4500 75%,#B81A00 100%)',
-                WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text',
-              }}>
-                ENTER THE LOOP
-              </h1>
-              <p style={{ fontFamily:'"Barlow",sans-serif', fontSize:'1rem', color:'rgba(240,210,170,0.45)', textAlign:'center', maxWidth:'480px', lineHeight:1.7, marginBottom:'3.5rem' }}>
-                Solve or be sent back. Every mistake makes the path longer.<br/>There is no escape — only completion.
-              </p>
+      {/* ── MAIN HERO ── */}
+      <div style={{
+        flex:1,display:'flex',flexDirection:'column',
+        alignItems:'center',justifyContent:'center',
+        minHeight:'100vh',
+        padding:'100px 24px 120px',
+        position:'relative',zIndex:10,
+        animation:'fadeUp .8s ease-out',
+      }}>
+        {/* greeting */}
+        <p style={{
+          fontFamily:'"Share Tech Mono",monospace',fontSize:'.62rem',
+          letterSpacing:'.32em',color:'rgba(220,100,40,0.60)',
+          textTransform:'uppercase',marginBottom:18,
+        }}>
+          Welcome back
+        </p>
 
-              {/* ── COUNTDOWN ── */}
-              <div style={{ marginBottom:'2.5rem', animation: pass===0 ? 'sectionFadeIn 0.9s 0.4s ease both' : 'none', opacity: pass===0?0:1, animationFillMode:'both' }}>
-                <p style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:'0.6rem', letterSpacing:'0.25em', color:'rgba(255,120,0,0.45)', textAlign:'center', marginBottom:'1.2rem' }}>
-                  {contestLive ? '// CONTEST IS LIVE' : '// CONTEST BEGINS IN'}
-                </p>
-                <div style={{ display:'flex', alignItems:'center', gap:'1rem' }}>
-                  <FlipDigit value={time.h} label="HRS" />
-                  <span style={{ fontFamily:'"Cinzel",serif', fontSize:'2rem', color:'rgba(255,100,0,0.4)', marginBottom:'1.5rem' }}>:</span>
-                  <FlipDigit value={time.m} label="MIN" />
-                  <span style={{ fontFamily:'"Cinzel",serif', fontSize:'2rem', color:'rgba(255,100,0,0.4)', marginBottom:'1.5rem' }}>:</span>
-                  <FlipDigit value={time.s} label="SEC" />
-                </div>
-              </div>
+        {/* team name hero */}
+        <h1 style={{
+          fontFamily:'"Cinzel",serif',fontWeight:900,
+          fontSize:'clamp(2.8rem,8vw,5.5rem)',
+          letterSpacing:'.06em',lineHeight:1,
+          background:'linear-gradient(175deg,#DDD0C8 0%,#B0A090 50%,#7A6A60 100%)',
+          WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',
+          textAlign:'center',marginBottom:14,
+          animation:'glowPulse 4s ease-in-out infinite',
+        }}>
+          {teamName}
+        </h1>
 
-              {/* ── START GAME BUTTON ── */}
-              <div style={{ textAlign:'center', animation: pass===0 ? 'sectionFadeIn 0.9s 0.6s ease both' : 'none', opacity: pass===0?0:1, animationFillMode:'both' }}>
-                <button
-                  disabled={!contestLive}
-                  onClick={() => contestLive && window.location.assign('/game')}
-                  className={contestLive ? 'start-btn-live' : 'start-btn-disabled'}
-                  style={{
-                    padding:'16px 56px', borderRadius:'10px',
-                    fontFamily:'"Cinzel",serif', fontSize:'0.95rem', fontWeight:700,
-                    letterSpacing:'0.22em', textTransform:'uppercase',
-                    transition:'filter 0.2s, transform 0.15s',
-                  }}
-                >
-                  {contestLive ? 'ENTER THE LOOP' : 'AWAITING IGNITION'}
-                </button>
-                {!contestLive && (
-                  <p style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:'0.58rem', color:'rgba(255,100,0,0.3)', marginTop:'0.8rem', letterSpacing:'0.1em' }}>
-                    // contest has not started yet
-                  </p>
-                )}
-              </div>
-            </section>
+        {/* RECURSION HELL title — smaller, below team name */}
+        <div className="title-flicker" style={{textAlign:'center',marginBottom:48}}>
+          <p style={{
+            fontFamily:'"Cinzel",serif',fontWeight:700,
+            fontSize:'clamp(.85rem,2.2vw,1.1rem)',
+            letterSpacing:'.30em',
+            background:`linear-gradient(90deg,${T.accentHi},${T.accent},${T.accentHi})`,
+            WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',
+          }}>RECURSION &nbsp; HELL</p>
+          <p style={{
+            fontFamily:'"Share Tech Mono",monospace',fontSize:'.50rem',
+            letterSpacing:'.22em',color:'rgba(200,120,60,0.42)',marginTop:6,
+          }}>THE UPSIDE DOWN &nbsp;∞</p>
+        </div>
 
-            {/* ── RULEBOOK ── */}
-            <section style={{ padding:'2rem 2rem 6rem', display:'flex', flexDirection:'column', alignItems:'center', animation: pass===0 ? 'sectionFadeIn 0.9s 0.8s ease both' : 'none', opacity: pass===0?0:1, animationFillMode:'both' }}>
-              {/* Divider */}
-              <div style={{ width:'100%', maxWidth:'680px', marginBottom:'2rem', display:'flex', alignItems:'center', gap:'1rem' }}>
-                <div style={{ flex:1, height:'1px', background:'linear-gradient(90deg,transparent,rgba(200,80,0,0.4))' }} />
-                <span style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:'0.58rem', color:'rgba(255,100,0,0.35)', letterSpacing:'0.15em', whiteSpace:'nowrap' }}>// GAME RULES</span>
-                <div style={{ flex:1, height:'1px', background:'linear-gradient(90deg,rgba(200,80,0,0.4),transparent)' }} />
-              </div>
-              <Rulebook />
-
-              {/* Status bar */}
-              <div style={{ marginTop:'4rem', display:'flex', alignItems:'center', gap:'0.5rem' }}>
-                <span style={{ width:'5px', height:'5px', borderRadius:'50%', background: contestLive?'#FF4500':'rgba(255,69,0,0.3)', boxShadow: contestLive?'0 0 6px rgba(255,69,0,0.9)':'none', display:'inline-block', animation: contestLive?'blink 1.4s step-start infinite':'none' }} />
-                <span style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:'0.58rem', color:'rgba(255,100,0,0.3)', letterSpacing:'0.08em' }}>
-                  {contestLive ? '// CONTEST LIVE — LOOP ACTIVE' : '// RECURSION HELL v1.0 — STANDING BY'}
-                </span>
-              </div>
-            </section>
-          </div>
-        ))}
+        {/* enter button */}
+        <button
+          className="enter-btn"
+          onClick={()=>window.location.assign('/game')}
+        >
+          Enter the Upside Down
+        </button>
       </div>
+
+      {/* ── BOTTOM BAR ── */}
+      <div style={{
+        position:'fixed',bottom:0,left:0,right:0,zIndex:50,
+        display:'flex',alignItems:'center',justifyContent:'space-between',
+        padding:'12px 24px',
+        background:'rgba(12,10,12,0.50)',
+        borderTop:'1px solid rgba(255,255,255,0.05)',
+        backdropFilter:'blur(16px)',
+      }}>
+        <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'.48rem',color:T.muted,letterSpacing:'.05em'}}>
+          v1.0 &nbsp;·&nbsp; depth: ∞
+        </span>
+
+        {/* ⓘ rulebook button */}
+        <button className="info-btn" onClick={()=>setShowRules(true)} title="Rulebook">
+          i
+        </button>
+
+        <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'.48rem',color:T.muted,letterSpacing:'.05em'}}>
+          {teamName}
+        </span>
+      </div>
+
+      {/* rulebook modal */}
+      {showRules && <RulebookModal onClose={()=>setShowRules(false)}/>}
     </div>
   )
 }
