@@ -2,16 +2,67 @@ import { Request, Response } from 'express';
 import type { JwtPayload } from '../services/auth.service';
 import { gameService } from '../services/game.service';
 
-export async function getState(_req: Request, res: Response): Promise<void> {
-  res.status(501).json({ error: 'Not implemented (Phase 6)' });
+export async function getState(req: Request, res: Response): Promise<void> {
+  const user = (req as Request & { user?: JwtPayload }).user;
+  if (!user?.participantId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  try {
+    const state = await gameService.getState(user.participantId);
+    res.json(state);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load game state' });
+  }
 }
 
-export async function getQuestion(_req: Request, res: Response): Promise<void> {
-  res.status(501).json({ error: 'Not implemented (Phase 6)' });
+export async function getQuestion(req: Request, res: Response): Promise<void> {
+  const user = (req as Request & { user?: JwtPayload }).user;
+  if (!user?.participantId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const nodeId = Number(req.params.nodeId);
+  if (!Number.isInteger(nodeId) || nodeId < 1) {
+    res.status(400).json({ error: 'Invalid node ID' });
+    return;
+  }
+
+  try {
+    const question = await gameService.getQuestion(nodeId, user.participantId);
+    if (!question) {
+      res.status(404).json({ error: 'No question available' });
+      return;
+    }
+    res.json(question);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get question' });
+  }
 }
 
-export async function submitAnswer(_req: Request, res: Response): Promise<void> {
-  res.status(501).json({ error: 'Not implemented (Phase 6)' });
+export async function submitAnswer(req: Request, res: Response): Promise<void> {
+  const user = (req as Request & { user?: JwtPayload }).user;
+  if (!user?.participantId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const { questionId, answer } = req.body as { questionId?: number; answer?: string };
+
+  const qId = Number(questionId);
+  if (!Number.isInteger(qId) || qId < 1 || typeof answer !== 'string') {
+    res.status(400).json({ error: 'Invalid payload' });
+    return;
+  }
+
+  try {
+    const state = await gameService.submitAnswer(user.participantId, qId, answer);
+    res.json(state);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to submit answer' });
+  }
 }
 
 export async function getQuestionFile(req: Request, res: Response): Promise<void> {
