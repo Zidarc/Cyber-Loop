@@ -232,19 +232,44 @@ export default function Landing() {
         }
       `}</style>
 
-      {/* ══ SEAMLESS SYNC VIDEO BACKGROUND ══ */}
-      <div style={{ position: 'fixed', inset: 0, zIndex: 0 }}>
-        <video ref={videoA} autoPlay muted playsInline 
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: activeVideo === 'A' ? 0.6 : 0, transition: 'opacity 0.5s linear' }}>
-          <source src="/Mindflayer.mp4" type="video/mp4" />
-        </video>
-        <video ref={videoB} muted playsInline 
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: activeVideo === 'B' ? 0.6 : 0, transition: 'opacity 0.5s linear' }}>
-          <source src="/Mindflayer.mp4" type="video/mp4" />
-        </video>
-      </div>
-      
-      <div style={{ position: 'fixed', inset: 0, zIndex: 1, background: 'radial-gradient(circle, transparent 20%, #000 150%)' }} />
+      /* ══ SEAMLESS SYNC VIDEO BACKGROUND (FIXED FOR NO FADE) ══ */
+<div style={{ position: 'fixed', inset: 0, zIndex: 0, background: '#000' }}>
+  <video 
+    ref={videoA} 
+    autoPlay 
+    muted 
+    playsInline 
+    style={{ 
+      position: 'absolute', 
+      inset: 0, 
+      width: '100%', 
+      height: '100%', 
+      objectFit: 'cover', 
+      opacity: 0.6,
+      // Change: Removed transition and used zIndex for instant swap
+      zIndex: activeVideo === 'A' ? 2 : 1 
+    }}
+  >
+    <source src="/Mindflayer.mp4" type="video/mp4" />
+  </video>
+  <video 
+    ref={videoB} 
+    muted 
+    playsInline 
+    style={{ 
+      position: 'absolute', 
+      inset: 0, 
+      width: '100%', 
+      height: '100%', 
+      objectFit: 'cover', 
+      opacity: 0.6,
+      // Change: Removed transition and used zIndex for instant swap
+      zIndex: activeVideo === 'B' ? 2 : 1
+    }}
+  >
+    <source src="/Mindflayer.mp4" type="video/mp4" />
+  </video>
+</div>
       
       <EmberCanvas />
       <LightningLayer />
