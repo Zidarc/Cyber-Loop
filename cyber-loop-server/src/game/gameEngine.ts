@@ -351,14 +351,99 @@ export async function submitAnswer(
     throw new Error('Invalid question id');
   }
 
-  const { error } = await supabase.rpc('submit_answer_rpc', {
-    p_participant_id: participantId,
-    p_question_id: qId,
-    p_answer: answer,
+  const { data: question, error: qErr } = await supabase
+    .from('questions')
+    .select('*')
+    .eq('id', qId)
+    .maybeSingle();
+
+  if (qErr || !question) {
+    throw new Error('Question not found');
+  }
+
+  const questionRow = question as QuestionRow;
+
+  const { data: progressRow, error: progErr } = await supabase
+    .from('participant_node_progress')
+    .select('status')
+    .eq('participant_id', participantId)
+    .eq('node_id', questionRow.node_id)
+    .maybeSingle();
+
+  if (progErr || !progressRow) {
+    throw new Error('Node not unlocked for participant');
+  }
+
+  const status = (progressRow as { status: string }).status;
+  if (status !== 'unlocked' && status !== 'solved') {
+    throw new Error('Node not unlocked for participant');
+  }
+
+  const { data: gsRow, error: gsErr } = await supabase
+    .from('participant_game_state')
+    .select('*')
+    .eq('participant_id', participantId)
+    .maybeSingle();
+
+  if (gsErr) {
+    throw new Error('Failed to load game state');
+  }
+
+  const gameState = (gsRow || {
+    participant_id: participantId,
+    total_correct: 0,
+    total_mistakes: 0,
+    score: 0,
+    last_checkpoint_id: null,
+    current_node_id: null,
+    current_question_id: null,
+    last_question_id: null,
+    penalty_nodes_unlocked: 0,
+    is_finished: 0,
+    started_at: new Date().toISOString(),
+    finished_at: null,
+    updated_at: new Date().toISOString(),
+  }) as GameStateRow;
+
+  const timestamp = new Date().toISOString();
+  const normalizedAnswer = String(answer ?? '').trim().toLowerCase();
+  const correctAnswer = String(questionRow.answer ?? '').trim().toLowerCase();
+  const isCorrect = normalizedAnswer === correctAnswer;
+
+  await supabase.from('question_attempts').insert({
+    participant_id: participantId,
+    question_id: qId,
+    node_id: questionRow.node_id,
+    is_correct: isCorrect ? 1 : 0,
+    attempted_at: timestamp,
   });
 
-  if (error) {
-    throw new Error(`submit_answer_rpc failed: ${error.message}`);
+  const updated = isCorrect
+    ? await handleCorrectAnswer(participantId, questionRow, gameState, timestamp)
+    : await handleWrongAnswer(participantId, questionRow, gameState, timestamp);
+
+  const { error: upsertErr } = await supabase
+    .from('participant_game_state')
+    .upsert(
+      {
+        participant_id: participantId,
+        total_correct: updated.total_correct,
+        total_mistakes: updated.total_mistakes,
+        score: updated.score,
+        last_checkpoint_id: updated.last_checkpoint_id,
+        current_node_id: questionRow.node_id,
+        current_question_id: qId,
+        last_question_id: updated.last_question_id,
+        penalty_nodes_unlocked: updated.penalty_nodes_unlocked,
+        is_finished: updated.is_finished,
+        finished_at: updated.finished_at,
+        updated_at: timestamp,
+      },
+      { onConflict: 'participant_id' }
+    );
+
+  if (upsertErr) {
+    throw new Error(`Failed to update game state: ${upsertErr.message}`);
   }
 
   return getFullGameState(participantId);
