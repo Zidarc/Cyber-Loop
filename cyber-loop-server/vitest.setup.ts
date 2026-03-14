@@ -11,7 +11,9 @@ process.env.JWT_SECRET = 'test-jwt-secret';
 
 const dir = path.dirname(TEST_DB);
 if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-if (fs.existsSync(TEST_DB)) fs.unlinkSync(TEST_DB);
+if (fs.existsSync(TEST_DB)) {
+  try { fs.unlinkSync(TEST_DB); } catch {}
+}
 
 const db = new Database(TEST_DB);
 db.pragma('foreign_keys = ON');
@@ -22,10 +24,10 @@ db.exec(schema);
 
 const hash = bcrypt.hashSync('password123', BCRYPT_COST);
 db.prepare(
-  'INSERT INTO participants (username, password_hash, team_name, is_active) VALUES (?, ?, ?, ?)'
+  'INSERT OR REPLACE INTO participants (id, username, password_hash, team_name, is_active) VALUES (1, ?, ?, ?, ?)'
 ).run('testteam', hash, 'Test Team', 1);
 db.prepare(
-  'INSERT INTO participants (username, password_hash, team_name, is_active) VALUES (?, ?, ?, ?)'
+  'INSERT OR REPLACE INTO participants (id, username, password_hash, team_name, is_active) VALUES (2, ?, ?, ?, ?)'
 ).run('inactive', hash, 'Inactive Team', 0);
 
 db.close();
