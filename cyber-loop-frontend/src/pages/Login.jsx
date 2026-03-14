@@ -1,403 +1,573 @@
-import { useMemo, useState, useEffect, useRef } from 'react'
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
+import SplashCursor from '../components/SplashCursor'
+import Lightning from '../components/Lightning'
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
-/* ─────────────────────────────────────────
-   CANVAS: vignette + lava glow + embers + spores + web
-───────────────────────────────────────── */
-function SceneCanvas({ active, cardRef }) {
-  const ref       = useRef(null)
-  const activeRef = useRef(active)
-  useEffect(() => { activeRef.current = active }, [active])
+/* ═══════════════════════════════════════════
+   THEME — single source of truth
+═══════════════════════════════════════════ */
+const T = {
+  bg:          '#18171a',
+  cardBg:      'rgba(14,10,12,0.55)',
+  cardBorder:  'rgba(255,255,255,0.11)',
 
+  emberPalette: [[255,90,0],[235,55,0],[210,35,0],[255,130,20],[185,30,0],[140,10,0]],
+  sporeRgb:    [255,100,0],
+  bulbColors:  ['#FF4400','#FF7700','#FFBB00','#FF2200','#FF5500','#FFDD44','#FF3300','#FF9900','#EE4400'],
+
+  titleTop:    '#C0130A',
+  titleBot:    '#5A0000',
+
+  btnFrom:     '#CC3300',
+  btnTo:       '#7A0000',
+  btnText:     '#FFE8D0',
+
+  label:       '#DDD0C8',
+  muted:       'rgba(200,170,150,0.45)',
+  accent:      'rgba(220,100,40,0.70)',
+}
+
+/* ─────────────────────────────────────────
+   EMBER CANVAS
+───────────────────────────────────────── */
+function EmberCanvas({ cardRef }) {
+  const ref = useRef(null)
   useEffect(() => {
     const canvas = ref.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
+    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight }
+    resize(); window.addEventListener('resize', resize)
 
-    function resize() {
-      canvas.width  = window.innerWidth
-      canvas.height = window.innerHeight
-    }
-    resize()
-    window.addEventListener('resize', resize)
-
-    const PALETTE = [
-      [255,80,0],[230,50,0],[200,30,0],
-      [255,120,0],[180,20,0],[220,60,0],[255,160,40],
-    ]
-
-    function getCardRect() {
-      if (cardRef && cardRef.current) {
+    function getCard() {
+      if (cardRef?.current) {
         const r = cardRef.current.getBoundingClientRect()
-        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, h: r.height }
+        return { left:r.left, right:r.right, top:r.top, h:r.height }
       }
-      const W = canvas.width, H = canvas.height
-      return { left: W*0.5-200, right: W*0.5+200, top: H*0.1, bottom: H*0.9, h: H*0.8 }
+      const W=canvas.width,H=canvas.height
+      return { left:W*.35, right:W*.65, top:H*.1, h:H*.8 }
     }
 
-    function spawnEmber(W, H) {
-      const rgb  = PALETTE[Math.floor(Math.random()*PALETTE.length)]
-      const size = 1.2 + Math.random()*2.8
-      const travel = H*(0.25+Math.random()*0.15)
-      const card = getCardRect()
-      // pick left or right side randomly
-      const side = Math.random() < 0.5 ? -1 : 1
-      const spawnX = side < 0 ? card.left : card.right
-      const spawnY = card.top + Math.random()*card.h
+    function spawnEmber() {
+      const rgb = T.emberPalette[Math.floor(Math.random()*T.emberPalette.length)]
+      const card = getCard(), side = Math.random()<.5?-1:1
       return {
-        x: spawnX, y: spawnY, size,
-        vx: side * (0.15 + Math.random()*0.35),  // shoot outward
-        vy: -(0.20+Math.random()*0.45),
-        travel, dist:0, rgb,
-        wobble:Math.random()*Math.PI*2,
-        wobbleSpd:0.012+Math.random()*0.018,
+        x: side<0 ? card.left : card.right,
+        y: card.top + Math.random()*card.h,
+        vx: side*(.10+Math.random()*.20), vy: -(.14+Math.random()*.22),
+        size: .8+Math.random()*1.8,
+        travel: canvas.height*(.18+Math.random()*.12),
+        dist:0, rgb, wobble:Math.random()*Math.PI*2, wSpd:.008+Math.random()*.010,
       }
     }
 
-    function spawnSpore(W, H) {
-      const side = Math.random()<0.5 ? -1 : 1
+    function spawnSpore() {
+      const side = Math.random()<.5?-1:1
       return {
-        x: side<0 ? -8 : W+8,
-        y: H*0.04+Math.random()*H*0.88,
-        r: 0.6+Math.random()*2.0,
-        vx: side*(0.10+Math.random()*0.25),
-        vy: (Math.random()-0.5)*0.10,
-        alpha: 0.12+Math.random()*0.50,
-        wobble:Math.random()*Math.PI*2,
-        wobbleSpd:0.005+Math.random()*0.009,
-        pulse:Math.random()*Math.PI*2,
-        pulseSpd:0.018+Math.random()*0.028,
+        x: side<0 ? -8 : canvas.width+8,
+        y: canvas.height*.05+Math.random()*canvas.height*.9,
+        r: .3+Math.random()*1.2, vx: side*(.05+Math.random()*.15),
+        vy: (Math.random()-.5)*.06, alpha:.06+Math.random()*.28,
+        wobble:Math.random()*Math.PI*2, wSpd:.004+Math.random()*.006,
+        pulse:Math.random()*Math.PI*2, pSpd:.010+Math.random()*.018,
       }
     }
 
-    const W0=canvas.width, H0=canvas.height
-    const EMBER_COUNT=110, SPORE_COUNT=55
+    const embers = Array.from({length:50},()=>{ const e=spawnEmber(); e.dist=e.travel*Math.random(); return e })
+    const spores = Array.from({length:35},()=>{ const s=spawnSpore(); s.x=Math.random()*canvas.width; return s })
 
-    const embers = Array.from({length:EMBER_COUNT},(_,i)=>{
-      const e=spawnEmber(W0,H0)
-      e._delay=Math.floor(i*(240/EMBER_COUNT))
-      e._ticks=0; e.dist=e.travel
-      return e
-    })
+    let rafId, paused=false
+    document.addEventListener('visibilitychange',()=>{ paused=document.hidden })
 
-    const spores = Array.from({length:SPORE_COUNT},()=>{
-      const s=spawnSpore(W0,H0); s.x=Math.random()*W0; return s
-    })
-
-    let webNodes=[]
-    function buildWeb(W,H){
-      webNodes=Array.from({length:18},()=>({
-        x:Math.random()*W, y:Math.random()*H,
-        vx:(Math.random()-0.5)*0.14, vy:(Math.random()-0.5)*0.14,
-        r:1.0+Math.random()*1.2, pulse:Math.random()*Math.PI*2,
-      }))
-    }
-    buildWeb(W0,H0)
-    window.addEventListener('resize',()=>buildWeb(canvas.width,canvas.height))
-
-    let t=0, rafId=null, paused=false
-    const onVis=()=>{paused=document.hidden}
-    document.addEventListener('visibilitychange',onVis)
-
-    function render(){
-      rafId=requestAnimationFrame(render)
+    function draw() {
+      rafId=requestAnimationFrame(draw)
       if(paused) return
-      t++
-      const W=canvas.width, H=canvas.height
+      const W=canvas.width,H=canvas.height
       ctx.clearRect(0,0,W,H)
 
-      const bv=0.52+Math.sin(t*0.016)*0.06
-      const vig=ctx.createRadialGradient(W/2,H/2,H*0.15,W/2,H/2,H*0.9)
-      vig.addColorStop(0,'rgba(0,0,0,0)')
-      vig.addColorStop(0.5,`rgba(0,0,0,${bv*0.28})`)
-      vig.addColorStop(1,`rgba(0,0,0,${bv})`)
-      ctx.fillStyle=vig; ctx.fillRect(0,0,W,H)
-
-      // Mind-Flayer web
-      const WD=Math.min(W,H)*0.22
-      ctx.save()
-      for(const n of webNodes){ n.x+=n.vx; n.y+=n.vy; n.pulse+=0.02; if(n.x<0||n.x>W)n.vx*=-1; if(n.y<0||n.y>H)n.vy*=-1 }
-      for(let i=0;i<webNodes.length;i++) for(let j=i+1;j<webNodes.length;j++){
-        const a=webNodes[i],b=webNodes[j],dx=a.x-b.x,dy=a.y-b.y,d=Math.sqrt(dx*dx+dy*dy)
-        if(d>WD) continue
-        const fade=1-d/WD
-        ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y)
-        ctx.strokeStyle=`rgba(160,45,0,${fade*0.08})`; ctx.lineWidth=fade*0.6; ctx.stroke()
-      }
-      for(const n of webNodes){ ctx.beginPath(); ctx.arc(n.x,n.y,n.r,0,Math.PI*2); ctx.fillStyle=`rgba(200,70,0,${0.08+Math.sin(n.pulse)*0.04})`; ctx.fill() }
-      ctx.restore()
-
-      // Spores
-      for(let i=0;i<spores.length;i++){
-        const s=spores[i]
-        s.x+=s.vx; s.y+=s.vy; s.wobble+=s.wobbleSpd; s.pulse+=s.pulseSpd; s.y+=Math.sin(s.wobble)*0.07
-        if((s.vx>0&&s.x>W+12)||(s.vx<0&&s.x<-12)) Object.assign(s,spawnSpore(W,H))
-        const pa=s.alpha*(0.72+Math.sin(s.pulse)*0.28)
-        ctx.save(); ctx.globalAlpha=pa
-        ctx.strokeStyle=`rgba(255,130,35,${pa*0.5})`; ctx.lineWidth=0.4
-        ctx.beginPath(); ctx.moveTo(s.x-s.r*1.8,s.y); ctx.lineTo(s.x+s.r*1.8,s.y); ctx.stroke()
-        ctx.beginPath(); ctx.moveTo(s.x,s.y-s.r*1.8); ctx.lineTo(s.x,s.y+s.r*1.8); ctx.stroke()
-        const sg=ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,s.r*2.6)
-        sg.addColorStop(0,`rgba(255,170,50,${pa})`); sg.addColorStop(0.4,`rgba(210,75,0,${pa*0.6})`); sg.addColorStop(1,'rgba(0,0,0,0)')
-        ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(s.x,s.y,s.r*2.6,0,Math.PI*2); ctx.fill(); ctx.restore()
+      for(const s of spores) {
+        s.x+=s.vx; s.y+=s.vy; s.wobble+=s.wSpd; s.pulse+=s.pSpd
+        s.y+=Math.sin(s.wobble)*.04
+        if((s.vx>0&&s.x>W+12)||(s.vx<0&&s.x<-12)) Object.assign(s,spawnSpore())
+        const a=s.alpha*(.6+Math.sin(s.pulse)*.28)
+        const [r,g,b]=T.sporeRgb
+        ctx.save(); ctx.globalAlpha=a
+        const sg=ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,s.r*2.2)
+        sg.addColorStop(0,`rgba(${r},${g},${b},1)`)
+        sg.addColorStop(.5,`rgba(${r*.6|0},${g*.3|0},0,.5)`)
+        sg.addColorStop(1,'rgba(0,0,0,0)')
+        ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(s.x,s.y,s.r*2.2,0,Math.PI*2); ctx.fill(); ctx.restore()
       }
 
-      // Embers
-      if(!activeRef.current) return
-      for(let i=0;i<embers.length;i++){
-        const e=embers[i]
-        if(e._ticks<e._delay){e._ticks++;continue}
-        if(e.dist>=e.travel){Object.assign(e,spawnEmber(W,H));e._delay=0;e._ticks=0;continue}
-        e.wobble+=e.wobbleSpd; e.x+=e.vx+Math.sin(e.wobble)*0.10; e.y+=e.vy; e.dist-=e.vy
+      for(const e of embers) {
+        if(e.dist>=e.travel){ Object.assign(e,spawnEmber()); continue }
+        e.wobble+=e.wSpd; e.x+=e.vx+Math.sin(e.wobble)*.07; e.y+=e.vy; e.dist-=e.vy
         const prog=e.dist/e.travel
-        const alpha=prog<0.08?prog/0.08:prog>0.65?Math.pow(1-(prog-0.65)/0.35,1.6):1
-        if(alpha<0.015) continue
-        const [r,g,b]=e.rgb; const bodyR=e.size*(1-prog*0.3)
-        ctx.save(); ctx.globalAlpha=alpha; ctx.translate(e.x,e.y); ctx.rotate(e.wobble*0.5)
-        const s=bodyR
+        const alpha=prog<.12?prog/.12:prog>.55?Math.pow(1-(prog-.55)/.45,1.8):1
+        if(alpha<.02) continue
+        const [r,g]=e.rgb; const s=e.size*(1-prog*.25)
+        ctx.save(); ctx.globalAlpha=alpha; ctx.translate(e.x,e.y); ctx.rotate(e.wobble*.4)
         ctx.beginPath()
-        ctx.moveTo(s*0.0,-s*1.1); ctx.lineTo(s*0.7,-s*0.6); ctx.lineTo(s*1.0,s*0.1)
-        ctx.lineTo(s*0.5,s*0.9); ctx.lineTo(-s*0.2,s*1.0); ctx.lineTo(-s*0.9,s*0.3); ctx.lineTo(-s*0.8,-s*0.7); ctx.closePath()
-        ctx.fillStyle=`rgba(${Math.floor(r*0.28)},${Math.floor(g*0.08)},0,1)`; ctx.fill()
+        ctx.moveTo(0,-s*1.1); ctx.lineTo(s*.7,-s*.5); ctx.lineTo(s*.9,s*.2)
+        ctx.lineTo(s*.4,s*.9); ctx.lineTo(-s*.3,s*.9); ctx.lineTo(-s*.9,s*.2); ctx.lineTo(-s*.7,-s*.5); ctx.closePath()
+        ctx.fillStyle=`rgba(${r*.25|0},0,0,1)`; ctx.fill()
         ctx.save(); ctx.clip()
-        const inner=ctx.createRadialGradient(s*0.05,-s*0.1,0,s*0.05,-s*0.1,s*0.85)
-        inner.addColorStop(0,'rgba(255,230,160,1)'); inner.addColorStop(0.3,`rgba(${r},${Math.max(g,30)},0,1)`)
-        inner.addColorStop(0.7,`rgba(${Math.floor(r*0.55)},0,0,1)`); inner.addColorStop(1,'rgba(0,0,0,0)')
-        ctx.fillStyle=inner; ctx.fill(); ctx.restore(); ctx.restore()
-        if(prog<0.75){
-          ctx.save(); ctx.globalAlpha=alpha*0.18
-          const tl=bodyR*(3+prog*4)
-          const trail=ctx.createLinearGradient(e.x,e.y,e.x+e.vx*2,e.y+tl)
-          trail.addColorStop(0,`rgba(${r},${Math.max(g-20,0)},0,1)`); trail.addColorStop(1,'rgba(0,0,0,0)')
-          ctx.strokeStyle=trail; ctx.lineWidth=bodyR*0.4
-          ctx.beginPath(); ctx.moveTo(e.x,e.y); ctx.lineTo(e.x+e.vx*2,e.y+tl); ctx.stroke(); ctx.restore()
-        }
+        const ig=ctx.createRadialGradient(0,-s*.1,0,0,-s*.1,s*.8)
+        ig.addColorStop(0,'rgba(255,200,120,1)')
+        ig.addColorStop(.3,`rgba(${r},${Math.max(g,8)},0,1)`)
+        ig.addColorStop(.75,`rgba(${r*.45|0},0,0,1)`)
+        ig.addColorStop(1,'rgba(0,0,0,0)')
+        ctx.fillStyle=ig; ctx.fill(); ctx.restore(); ctx.restore()
       }
     }
-
-    rafId=requestAnimationFrame(render)
-    return ()=>{ cancelAnimationFrame(rafId); window.removeEventListener('resize',resize); document.removeEventListener('visibilitychange',onVis) }
+    rafId=requestAnimationFrame(draw)
+    return()=>{ cancelAnimationFrame(rafId); window.removeEventListener('resize',resize) }
   },[])
-
-  return <canvas ref={ref} style={{position:'absolute',inset:0,width:'100%',height:'100%',zIndex:2,pointerEvents:'none'}}/>
+  return <canvas ref={ref} style={{position:'fixed',inset:0,width:'100%',height:'100%',zIndex:1,pointerEvents:'none'}}/>
 }
 
-/* ── Christmas lights ── */
-const LIGHT_COLORS=['#FF4500','#FF8C00','#FFD060','#FF2200','#FF6A00','#FFAA00','#FF5500','#FFC040']
-function LightStrip(){
-  const [states,setStates]=useState(()=>Array.from({length:20},(_,i)=>({color:LIGHT_COLORS[i%LIGHT_COLORS.length],on:true,bri:1})))
+/* ─────────────────────────────────────────
+   BULB STRIP
+───────────────────────────────────────── */
+const WIRE_SAG = [0,2,4,5,6,5,4,2,0]
+
+function BulbStrip({ typing }) {
+  const COUNT = 9
+  const [bulbs, setBulbs] = useState(()=>Array.from({length:COUNT},(_,i)=>({color:T.bulbColors[i],on:true,bri:1})))
+
   useEffect(()=>{
-    const iv=setInterval(()=>setStates(prev=>prev.map(l=>({...l,on:Math.random()>0.10,bri:0.6+Math.random()*0.4}))),110)
-    return ()=>clearInterval(iv)
-  },[])
+    if(typing) return
+    const iv=setInterval(()=>{
+      const idx=Math.floor(Math.random()*COUNT)
+      setBulbs(p=>p.map((b,i)=>i===idx?{...b,on:false,bri:0}:b))
+      setTimeout(()=>setBulbs(p=>p.map((b,i)=>i===idx?{...b,on:true,bri:.7+Math.random()*.3}:b)),60+Math.random()*100)
+    },700+Math.random()*900)
+    return()=>clearInterval(iv)
+  },[typing])
+
+  useEffect(()=>{
+    if(!typing) return
+    let alive=true; const ts=[]
+    const flicker=()=>{
+      if(!alive) return
+      const idx=Math.floor(Math.random()*COUNT)
+      setBulbs(p=>p.map((b,i)=>i===idx?{...b,on:false,bri:0}:b))
+      ts.push(setTimeout(()=>setBulbs(p=>p.map((b,i)=>i===idx?{...b,on:true,bri:.5+Math.random()*.5}:b)),35+Math.random()*65))
+      ts.push(setTimeout(flicker,70+Math.random()*120))
+    }
+    flicker()
+    return()=>{ alive=false; ts.forEach(clearTimeout) }
+  },[typing])
+
   return (
-    <div style={{display:'flex',justifyContent:'center',alignItems:'flex-end',gap:'8px',marginBottom:'8px',padding:'0 4px',flexWrap:'wrap'}}>
-      {states.map((l,i)=>(
-        <div key={i} style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
-          <div style={{width:1.5,height:7,background:'rgba(255,255,255,0.12)'}}/>
-          <div style={{width:7,height:10,borderRadius:'50% 50% 38% 38%',background:l.on?l.color:'rgba(25,8,0,0.85)',boxShadow:l.on?`0 0 ${5*l.bri}px ${l.color},0 0 ${13*l.bri}px ${l.color}90`:'none',opacity:l.on?(0.7+l.bri*0.3):0.22,transition:'background 0.07s,box-shadow 0.07s'}}/>
-        </div>
-      ))}
+    <div style={{marginBottom:8}}>
+      <svg width="100%" height="22" style={{overflow:'visible',display:'block'}}>
+        <path
+          d={`M0,8 ${Array.from({length:COUNT},(_,i)=>`L${(i/(COUNT-1))*100}%,${8+WIRE_SAG[i]}`).join(' ')} L100%,8`}
+          fill="none" stroke="rgba(200,190,170,0.18)" strokeWidth="1"
+        />
+        {Array.from({length:COUNT},(_,i)=>(
+          <line key={i} x1={`${(i/(COUNT-1))*100}%`} y1={8+WIRE_SAG[i]} x2={`${(i/(COUNT-1))*100}%`} y2={20+WIRE_SAG[i]} stroke="rgba(200,190,170,0.15)" strokeWidth="0.7"/>
+        ))}
+      </svg>
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:-6,padding:'0 1px'}}>
+        {bulbs.map((b,i)=>(
+          <div key={i} style={{
+            width:13,height:18,borderRadius:'38% 38% 52% 52%',
+            background: b.on?b.color:'rgba(18,14,12,0.9)',
+            boxShadow: b.on?`0 0 ${7*b.bri}px ${b.color},0 0 ${16*b.bri}px ${b.color}88,0 0 ${28*b.bri}px ${b.color}44`:'none',
+            opacity: b.on?.8+b.bri*.2:.15,
+            transition:'background .04s,box-shadow .04s',
+            marginTop:WIRE_SAG[i],
+          }}/>
+        ))}
+      </div>
     </div>
   )
 }
 
-/* ── Vine border ── */
-function VineBorder(){
+/* ─────────────────────────────────────────
+   SPIDER
+───────────────────────────────────────── */
+function Spider({ cardRef }) {
+  const canvasRef = useRef(null)
+  useEffect(()=>{
+    const canvas=canvasRef.current; if(!canvas) return
+    const ctx=canvas.getContext('2d')
+    let rafId,t=0
+
+    function getPos(w,h,dist){
+      const p=2*(w+h); let d=((dist%p)+p)%p
+      if(d<w)       return{x:d,y:0,angle:0}
+      if(d<w+h)     return{x:w,y:d-w,angle:Math.PI/2}
+      if(d<2*w+h)   return{x:w-(d-w-h),y:h,angle:Math.PI}
+      return{x:0,y:h-(d-2*w-h),angle:-Math.PI/2}
+    }
+
+    function drawSpider(x,y,angle,lp){
+      ctx.save(); ctx.translate(x,y); ctx.rotate(angle+Math.PI/2); ctx.scale(1.5,1.5)
+      const g=ctx.createRadialGradient(0,0,0,0,0,14)
+      g.addColorStop(0,'rgba(200,60,0,0.22)'); g.addColorStop(1,'rgba(0,0,0,0)')
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill()
+      const legs=[[-1,-.4,9,8],[-1,-.9,10,9],[-1,-1.4,9,8],[-1,-1.9,8,7],[1,.4,9,8],[1,.9,10,9],[1,1.4,9,8],[1,1.9,8,7]]
+      const drawLegs=(color,lw)=>{
+        ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.lineCap='round'
+        legs.forEach(([side,base,l1,l2],i)=>{
+          const bend=Math.sin(lp+(i%2===0?0:Math.PI))*.50
+          const a1=base+bend*side, sx=side*4, sy=-1+i*.5
+          const mx=sx+Math.cos(a1)*l1*side, my=sy+Math.sin(Math.abs(a1))*l1-2
+          const a2=a1+(side*.9+bend*.4)
+          const ex=mx+Math.cos(a2)*l2*side, ey=my+Math.sin(Math.abs(a2))*l2
+          ctx.beginPath(); ctx.moveTo(sx,sy); ctx.quadraticCurveTo(mx,my,ex,ey); ctx.stroke()
+        })
+      }
+      drawLegs('rgba(220,60,0,0.12)',1.6)
+      drawLegs('#383838',0.9)
+      ctx.fillStyle='#181818'; ctx.beginPath(); ctx.ellipse(0,4,4.5,6,0,0,Math.PI*2); ctx.fill()
+      const aS=ctx.createRadialGradient(-1,2,0,0,4,5.5)
+      aS.addColorStop(0,'rgba(75,75,75,0.45)'); aS.addColorStop(1,'rgba(0,0,0,0)')
+      ctx.fillStyle=aS; ctx.beginPath(); ctx.ellipse(0,4,4.5,6,0,0,Math.PI*2); ctx.fill()
+      ctx.fillStyle='rgba(215,35,0,0.95)'
+      ctx.beginPath(); ctx.ellipse(0,2.8,1.1,1.7,0,0,Math.PI*2); ctx.fill()
+      ctx.beginPath(); ctx.ellipse(0,5.3,.85,1.2,0,0,Math.PI*2); ctx.fill()
+      ctx.fillStyle='#1e1e1e'; ctx.beginPath(); ctx.ellipse(0,-2.5,3.5,4,0,0,Math.PI*2); ctx.fill()
+      const hS=ctx.createRadialGradient(-.8,-3.8,0,0,-2.5,4.2)
+      hS.addColorStop(0,'rgba(85,85,85,0.35)'); hS.addColorStop(1,'rgba(0,0,0,0)')
+      ctx.fillStyle=hS; ctx.beginPath(); ctx.ellipse(0,-2.5,3.5,4,0,0,Math.PI*2); ctx.fill()
+      ;[[-1.4,-4.3],[1.4,-4.3],[-.6,-5.1],[.6,-5.1]].forEach(([ex,ey])=>{
+        ctx.fillStyle='rgba(240,55,0,0.35)'; ctx.beginPath(); ctx.arc(ex,ey,2,0,Math.PI*2); ctx.fill()
+        ctx.fillStyle='rgba(255,70,0,1)';    ctx.beginPath(); ctx.arc(ex,ey,.9,0,Math.PI*2); ctx.fill()
+      })
+      ctx.restore()
+    }
+
+    let dist=0
+    function render(){
+      rafId=requestAnimationFrame(render); t++
+      if(!cardRef.current) return
+      const r=cardRef.current.getBoundingClientRect()
+      canvas.width=r.width+120; canvas.height=r.height+120
+      canvas.style.left=(r.left-60)+'px'; canvas.style.top=(r.top-60)+'px'
+      ctx.clearRect(0,0,canvas.width,canvas.height)
+      dist+=.55
+      const pos=getPos(r.width,r.height,dist)
+      drawSpider(pos.x+60,pos.y+60,pos.angle,t*.18)
+    }
+    rafId=requestAnimationFrame(render)
+    return()=>cancelAnimationFrame(rafId)
+  },[])
+  return <canvas ref={canvasRef} style={{position:'fixed',pointerEvents:'none',zIndex:20}}/>
+}
+
+/* ─────────────────────────────────────────
+   BACKGROUND
+───────────────────────────────────────── */
+function Background() {
+  const [phase,setPhase]=useState(0)
+  const [bolt,setBolt]=useState(null)
+
+  useEffect(()=>{
+    const id=setTimeout(()=>{
+      const s=performance.now(),DUR=4500; let raf
+      const tick=()=>{
+        const t=Math.min((performance.now()-s)/DUR,1)
+        setPhase(t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2)
+        if(t<1) raf=requestAnimationFrame(tick)
+      }
+      raf=requestAnimationFrame(tick); return()=>cancelAnimationFrame(raf)
+    },600)
+    return()=>clearTimeout(id)
+  },[])
+
+  useEffect(()=>{
+    const SEQ=['left','centre','right']; let idx=0; const ts=[]
+    const fire=()=>{
+      setBolt(SEQ[idx++%3])
+      ts.push(setTimeout(()=>{ setBolt(null); ts.push(setTimeout(fire,8000)) },700))
+    }
+    ts.push(setTimeout(fire,5500))
+    return()=>ts.forEach(clearTimeout)
+  },[])
+
+  const cfgs={
+    left:  {hue:18, xOffset:-.75,speed:1.0,intensity:2.6,size:1.1},
+    centre:{hue:8,  xOffset:0,   speed:.95,intensity:3.0,size:1.3},
+    right: {hue:355,xOffset:.75, speed:.85,intensity:2.4,size:1.0},
+  }
+
   return (
-    <svg style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:1,overflow:'visible'}} preserveAspectRatio="none">
-      <defs><style>{`
-        @keyframes vg{0%{stroke-dashoffset:700;opacity:0}18%{opacity:0.75}80%{opacity:0.5}100%{stroke-dashoffset:0;opacity:0.38}}
-        @keyframes vp{0%,100%{opacity:0.32;filter:drop-shadow(0 0 2px #7A1800)}50%{opacity:0.62;filter:drop-shadow(0 0 7px #BB3000)}}
-        .v1{stroke-dasharray:700;animation:vg 3.8s ease-out forwards,vp 4.5s 3.8s ease-in-out infinite}
-        .v2{stroke-dasharray:450;animation:vg 3.0s 0.35s ease-out forwards,vp 5.5s 3.35s ease-in-out infinite}
-        .v3{stroke-dasharray:280;animation:vg 2.4s 0.7s ease-out forwards,vp 6s 3.1s ease-in-out infinite}
-        .v4{stroke-dasharray:350;animation:vg 2.8s 0.2s ease-out forwards,vp 5s 3.0s ease-in-out infinite}
-      `}</style></defs>
-      <path className="v1" d="M0,45 C12,22 28,10 55,7 C76,5 92,14 105,24 C118,34 122,48 112,62 C104,74 88,80 72,84" fill="none" stroke="#6B1500" strokeWidth="1.6" strokeLinecap="round"/>
-      <path className="v2" d="M0,22 C9,8 22,2 44,4 C62,7 75,18 70,38 C66,54 50,62 40,70" fill="none" stroke="#4A0E00" strokeWidth="1.0" strokeLinecap="round"/>
-      <path className="v3" d="M18,0 C25,14 20,30 30,46 C38,58 54,62 46,76" fill="none" stroke="#5A1200" strokeWidth="0.75" strokeLinecap="round"/>
-      <g transform="rotate(180)" style={{transformOrigin:'50% 50%',transformBox:'fill-box'}}>
-        <path className="v1" d="M0,45 C12,22 28,10 55,7 C76,5 92,14 105,24 C118,34 122,48 112,62 C104,74 88,80 72,84" fill="none" stroke="#6B1500" strokeWidth="1.6" strokeLinecap="round"/>
-        <path className="v4" d="M0,22 C9,8 22,2 44,4 C62,7 75,18 70,38 C66,54 50,62 40,70" fill="none" stroke="#4A0E00" strokeWidth="1.0" strokeLinecap="round"/>
-      </g>
-    </svg>
+    <div style={{position:'fixed',inset:0,zIndex:0,background:T.bg}}>
+      {/* ember phase — warm amber bloom from centre */}
+      <div style={{
+        position:'absolute',inset:0,
+        background:'radial-gradient(ellipse at 50% 48%, rgba(220,80,0,0.28) 0%, rgba(160,35,0,0.14) 35%, transparent 70%)',
+        opacity:Math.max(0,1-phase*1.8), pointerEvents:'none',
+      }}/>
+      <div style={{
+        position:'absolute',bottom:0,left:0,right:0,height:'55%',
+        background:'linear-gradient(0deg,rgba(180,50,0,0.22) 0%,rgba(120,20,0,0.10) 50%,transparent 100%)',
+        opacity:Math.max(0,1-phase*1.6), pointerEvents:'none',
+      }}/>
+
+      {/* settled — ember glow pockets, left + right asymmetric */}
+      <div style={{
+        position:'absolute',inset:0,
+        background:'radial-gradient(ellipse at 18% 72%, rgba(200,55,0,0.13) 0%, transparent 40%)',
+        opacity:Math.min(1,phase*1.4), pointerEvents:'none',
+      }}/>
+      <div style={{
+        position:'absolute',inset:0,
+        background:'radial-gradient(ellipse at 82% 32%, rgba(160,30,0,0.10) 0%, transparent 38%)',
+        opacity:Math.min(1,phase*1.3), pointerEvents:'none',
+      }}/>
+      {/* deep red vignette corners */}
+      <div style={{
+        position:'absolute',inset:0,
+        background:'radial-gradient(ellipse at 0% 0%, rgba(100,5,0,0.18) 0%, transparent 45%), radial-gradient(ellipse at 100% 100%, rgba(90,5,0,0.16) 0%, transparent 40%)',
+        opacity:Math.min(1,phase*1.6), pointerEvents:'none',
+      }}/>
+      {/* very subtle top red wash */}
+      <div style={{
+        position:'absolute',top:0,left:0,right:0,height:'40%',
+        background:'linear-gradient(180deg,rgba(80,6,0,0.14) 0%,transparent 100%)',
+        opacity:Math.min(1,phase*1.5), pointerEvents:'none',
+      }}/>
+      {bolt&&(
+        <div style={{position:'absolute',inset:0,mixBlendMode:'screen',pointerEvents:'none',animation:'bIn .12s ease-out'}}>
+          <style>{`@keyframes bIn{from{opacity:0}to{opacity:1}}`}</style>
+          <Lightning {...cfgs[bolt]}/>
+        </div>
+      )}
+    </div>
   )
 }
 
-/* ── Main Login ── */
-export default function Login(){
-  const [teamName,setTeamName]=useState('')
-  const [password,setPassword]=useState('')
-  const [error,setError]=useState('')
-  const [loading,setLoading]=useState(false)
-  const [shake,setShake]=useState(false)
-  const cardRef=useRef(null)
+/* ─────────────────────────────────────────
+   LOGIN
+───────────────────────────────────────── */
+export default function Login() {
+  const [team,   setTeam]   = useState('')
+  const [pass,   setPass]   = useState('')
+  const [error,  setError]  = useState('')
+  const [loading,setLoading]= useState(false)
+  const [shake,  setShake]  = useState(false)
+  const [typing, setTyping] = useState(false)
+  const cardRef   = useRef(null)
+  const typingRef = useRef(null)
 
-  const canSubmit=useMemo(()=>teamName.trim().length>0&&password.trim().length>0&&!loading,[teamName,password,loading])
+  const canSubmit = useMemo(()=>team.trim()&&pass.trim()&&!loading,[team,pass,loading])
+
+  const onType = useCallback(()=>{
+    setTyping(true); clearTimeout(typingRef.current)
+    typingRef.current=setTimeout(()=>setTyping(false),1200)
+  },[])
 
   async function handleSubmit(e){
     e.preventDefault(); if(loading) return
-    const tn=teamName.trim(),pw=password.trim()
+    const tn=team.trim(),pw=pass.trim()
     setError('')
     if(!tn||!pw){ setShake(true); setError('Team name and password are required.'); setTimeout(()=>setShake(false),420); return }
     setLoading(true)
     try{
       await sleep(800)
       sessionStorage.setItem('teamName',tn)
-
-      // ── BACKEND HOOK ──────────────────────────────────────────
-      // const res = await fetch('/api/auth/login', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ teamName: tn, password: pw })
-      // })
-      // if (!res.ok) {
-      //   const d = await res.json().catch(() => ({}))
-      //   setError(d.error || 'Invalid credentials.')
-      //   setLoading(false); return
-      // }
-      // const data = await res.json()
-      // sessionStorage.setItem('token', data.token)
-      // ─────────────────────────────────────────────────────────
-
+      // ── BACKEND HOOK ──
+      // const res=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({teamName:tn,password:pw})})
+      // if(!res.ok){const d=await res.json().catch(()=>({}));setError(d.error||'Invalid credentials.');setLoading(false);return}
+      // sessionStorage.setItem('token',(await res.json()).token)
       window.location.assign('/landing')
     }catch{ setError('Authentication failed. Try again.'); setLoading(false) }
   }
 
   return (
-    <div style={{minHeight:'100vh',position:'relative',overflow:'hidden',display:'flex',alignItems:'center',justifyContent:'center',background:'#1a1a1a',userSelect:'none',WebkitUserSelect:'none'}}>
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',position:'relative'}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Libre+Baskerville:wght@700&family=Share+Tech+Mono&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
-        *{user-select:none;-webkit-user-select:none;box-sizing:border-box}
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Share+Tech+Mono&family=Barlow:wght@400;500;600&display=swap');
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+        html,body,*{cursor:none!important;user-select:none;-webkit-user-select:none}
         input{user-select:text!important;-webkit-user-select:text!important}
-        @keyframes shakeX{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-9px)}40%,80%{transform:translateX(9px)}}
-        @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes cardFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
-        @keyframes stG{
-          0%,83%,100%{clip-path:none;transform:translate(0);opacity:1}
-          84%{clip-path:polygon(0 12%,100% 12%,100% 30%,0 30%);transform:translate(-5px,0)}
-          85%{clip-path:polygon(0 54%,100% 54%,100% 70%,0 70%);transform:translate(5px,0)}
-          86%{clip-path:none;transform:translate(0)}
-          92%{clip-path:polygon(0 28%,100% 28%,100% 44%,0 44%);transform:translate(4px,-1px)}
-          93%{clip-path:polygon(0 62%,100% 62%,100% 78%,0 78%);transform:translate(-4px,1px)}
-          94%{clip-path:none;transform:translate(0)}
-          97.2%{opacity:1}97.6%{opacity:0.08;transform:translate(3px,0)}98%{opacity:1;transform:translate(0)}
+
+        @keyframes shake  {0%,100%{transform:translateX(0)}22%,66%{transform:translateX(-8px)}44%,88%{transform:translateX(8px)}}
+        @keyframes floatY {0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+        @keyframes spin   {to{transform:rotate(360deg)}}
+        @keyframes blink  {0%,49%{opacity:1}50%,100%{opacity:0}}
+        @keyframes sweep  {0%{left:-70%}100%{left:130%}}
+        @keyframes cardGlow{
+          0%,100%{box-shadow:inset 0 1px 0 rgba(255,255,255,0.12),inset 0 -1px 0 rgba(0,0,0,0.25),0 2px 0 rgba(255,255,255,0.05),0 28px 70px rgba(0,0,0,0.70),0 0 50px rgba(150,35,0,0.10)}
+          50%    {box-shadow:inset 0 1px 0 rgba(255,255,255,0.16),inset 0 -1px 0 rgba(0,0,0,0.25),0 2px 0 rgba(255,255,255,0.06),0 28px 70px rgba(0,0,0,0.70),0 0 65px rgba(190,50,0,0.16)}
         }
-        @keyframes stGA{
-          0%,83%,100%{opacity:0;clip-path:none}
-          84%{clip-path:polygon(0 10%,100% 10%,100% 32%,0 32%);transform:translate(-7px,0);opacity:0.82}
-          85%{clip-path:polygon(0 56%,100% 56%,100% 72%,0 72%);transform:translate(6px,0);opacity:0.82}
-          86%{opacity:0}
-          92%{clip-path:polygon(0 26%,100% 26%,100% 46%,0 46%);transform:translate(7px,0);opacity:0.72}
-          93%{clip-path:polygon(0 64%,100% 64%,100% 80%,0 80%);transform:translate(-6px,0);opacity:0.72}
-          94%{opacity:0}
+        @keyframes titleFlicker{0%,88%,100%{opacity:1}89%{opacity:.55}90%{opacity:1}94%{opacity:.7}95%{opacity:1}}
+        @keyframes btnPulse{
+          0%,100%{box-shadow:inset 0 1px 0 rgba(255,180,100,0.18),0 6px 20px rgba(180,40,0,0.38),0 2px 6px rgba(0,0,0,0.55)}
+          50%    {box-shadow:inset 0 1px 0 rgba(255,180,100,0.22),0 6px 30px rgba(210,60,0,0.55),0 2px 6px rgba(0,0,0,0.55)}
         }
-        @keyframes stGB{
-          0%,83%,100%{opacity:0;clip-path:none}
-          84%{clip-path:polygon(0 24%,100% 24%,100% 44%,0 44%);transform:translate(7px,0);opacity:0.52}
-          85%{clip-path:polygon(0 46%,100% 46%,100% 60%,0 60%);transform:translate(-7px,0);opacity:0.52}
-          86%{opacity:0}
-          92%{clip-path:polygon(0 42%,100% 42%,100% 58%,0 58%);transform:translate(-7px,0);opacity:0.48}
-          93%{clip-path:polygon(0 68%,100% 68%,100% 82%,0 82%);transform:translate(6px,0);opacity:0.48}
-          94%{opacity:0}
+
+        .card-anim {animation:floatY 10s ease-in-out infinite,cardGlow 5s ease-in-out infinite}
+        .card-shake{animation:shake 420ms ease-in-out!important}
+        .title-flicker{animation:titleFlicker 9s linear infinite}
+
+        .hell-input{
+          width:100%;padding:12px 15px;
+          background:rgba(255,255,255,0.06);
+          border:1px solid rgba(255,255,255,0.09);
+          border-radius:10px;color:#EDE0D4;
+          font-family:'Share Tech Mono',monospace;font-size:.875rem;
+          outline:none;caret-color:#FF6600;
+          box-shadow:inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.15);
+          transition:border-color .2s,background .2s,box-shadow .2s;
         }
-        @keyframes stFlicker{0%,100%{opacity:1}93.5%{opacity:1}94%{opacity:0.55}94.3%{opacity:1}97.8%{opacity:0.82}98%{opacity:1}}
-        .st-title{position:relative;display:inline-block;animation:stG 14s steps(1) infinite,stFlicker 8s linear infinite;filter:drop-shadow(0 0 18px rgba(255,120,0,0.55)) drop-shadow(0 0 6px rgba(255,60,0,0.4))}
-        .st-title::before,.st-title::after{content:attr(data-text);position:absolute;inset:0;background:linear-gradient(180deg,#FF9500 0%,#FF4800 42%,#CC1200 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;pointer-events:none}
-        .st-title::before{animation:stGA 14s steps(1) infinite}
-        .st-title::after{animation:stGB 14s steps(1) infinite}
-        @keyframes borderPulse{
-          0%,100%{box-shadow:0 0 24px rgba(160,38,0,0.16),0 0 0 1px rgba(160,55,0,0.28) inset}
-          50%    {box-shadow:0 0 44px rgba(210,65,0,0.26),0 0 0 1px rgba(220,85,0,0.42) inset,0 0 70px rgba(160,28,0,0.09)}
+        .hell-input::placeholder{color:rgba(210,175,150,0.32);font-style:italic}
+        .hell-input:focus{
+          background:rgba(255,255,255,0.09);
+          border-color:rgba(200,70,0,0.50);
+          box-shadow:inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.15), 0 0 0 3px rgba(180,50,0,0.12), 0 0 18px rgba(160,40,0,0.08);
         }
-        @keyframes divShimmer{0%{background-position:-200% center}100%{background-position:200% center}}
-        @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
-        @keyframes btnGlow{
-          0%,100%{box-shadow:0 4px 18px rgba(210,75,0,0.42),0 2px 6px rgba(0,0,0,0.6)}
-          50%    {box-shadow:0 4px 28px rgba(250,115,0,0.60),0 2px 6px rgba(0,0,0,0.6),0 0 44px rgba(190,55,0,0.20)}
+        .btn-on{
+          width:100%;padding:14px 0;border:none;border-radius:10px;
+          font-family:'Cinzel',serif;font-size:.80rem;font-weight:700;
+          letter-spacing:.26em;text-transform:uppercase;cursor:none;
+          background:linear-gradient(160deg,#D94400 0%,#A01800 45%,#6A0000 100%);
+          color:#FFE8D0;position:relative;overflow:hidden;
+          box-shadow:inset 0 1px 0 rgba(255,180,100,0.18),inset 0 -1px 0 rgba(0,0,0,0.30);
+          animation:btnPulse 3.5s ease-in-out infinite;
+          transition:filter .18s,transform .12s;
         }
-        @keyframes btnSweep{0%{left:-80%}100%{left:140%}}
-        @keyframes noiseShift{0%{background-position:0 0}25%{background-position:12px -6px}50%{background-position:-9px 14px}75%{background-position:6px -11px}100%{background-position:0 0}}
-        .shake{animation:shakeX 420ms ease-in-out}
-        .spin{animation:spin 0.8s linear infinite}
-        .card-float{animation:cardFloat 8s ease-in-out infinite}
-        .card-border{animation:borderPulse 3.8s ease-in-out infinite}
-        .hell-input{width:100%;background:rgba(4,1,0,0.68);border:1px solid rgba(95,32,0,0.52);border-radius:7px;padding:11px 14px;color:#F5ECD7;font-family:'Share Tech Mono',monospace;font-size:0.88rem;outline:none;caret-color:#FF7700;transition:border-color .2s,box-shadow .2s,background .2s;user-select:text!important;-webkit-user-select:text!important}
-        .hell-input::placeholder{color:rgba(240,195,130,0.18);font-style:italic}
-        .hell-input:focus{border-color:rgba(215,95,0,0.82);background:rgba(6,2,0,0.80);box-shadow:0 0 0 3px rgba(195,75,0,0.12),0 0 16px rgba(190,65,0,0.09)}
-        .login-btn{width:100%;padding:13px 0;border:none;border-radius:7px;font-family:'Cinzel',serif;font-size:0.82rem;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;cursor:pointer;position:relative;overflow:hidden;transition:filter .2s,transform .15s}
-        .btn-on{background:linear-gradient(180deg,#FF9500 0%,#E06200 45%,#961800 100%);color:#fff;text-shadow:0 1px 5px rgba(0,0,0,0.6);animation:btnGlow 2.8s ease-in-out infinite}
-        .btn-on::after{content:'';position:absolute;top:0;left:-80%;width:50%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.12),transparent);transform:skewX(-18deg);animation:btnSweep 3.6s ease-in-out infinite}
+        .btn-on::before{
+          content:'';position:absolute;inset:0;border-radius:10px;
+          background:linear-gradient(180deg,rgba(255,150,80,0.08) 0%,transparent 50%);
+          pointer-events:none;
+        }
+        .btn-on::after{
+          content:'';position:absolute;top:0;left:-70%;width:45%;height:100%;
+          background:linear-gradient(90deg,transparent,rgba(255,200,150,0.12),transparent);
+          transform:skewX(-16deg);animation:sweep 4.5s ease-in-out infinite;
+        }
         .btn-on:hover{filter:brightness(1.12);transform:translateY(-2px)}
-        .btn-on:active{transform:translateY(0)}
-        .btn-off{background:rgba(255,255,255,0.04);color:rgba(240,195,130,0.16);cursor:not-allowed;border:1px solid rgba(75,28,0,0.22)}
+        .btn-on:active{transform:translateY(0);filter:brightness(0.96)}
+        .btn-off{
+          width:100%;padding:14px 0;border-radius:10px;border:none;
+          font-family:'Cinzel',serif;font-size:.80rem;font-weight:700;
+          letter-spacing:.26em;text-transform:uppercase;cursor:not-allowed;
+          background:rgba(255,255,255,0.025);color:rgba(200,160,140,0.18);
+          border:1px solid rgba(255,255,255,0.06);
+        }
       `}</style>
 
-      <SceneCanvas active={true} cardRef={cardRef}/>
+      <Background/>
+      <EmberCanvas cardRef={cardRef}/>
+      <SplashCursor/>
+      <Spider cardRef={cardRef}/>
 
-      <div ref={cardRef} className={`card-float card-border${shake?' shake':''}`}
-        style={{position:'relative',zIndex:10,width:'min(92vw,415px)',background:'rgba(15,15,16,0.62)',borderRadius:'11px',border:'1px solid rgba(150,50,0,0.36)',backdropFilter:'blur(7px)',padding:'clamp(1.5rem,4vw,2.1rem) clamp(1.3rem,4vw,2rem)',overflow:'hidden'}}>
-
-        <VineBorder/>
-
-        {/* Noise overlay */}
-        <div style={{position:'absolute',inset:0,pointerEvents:'none',zIndex:0,borderRadius:'11px',backgroundImage:'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.92\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")',backgroundSize:'175px',opacity:0.025,animation:'noiseShift 0.45s steps(1) infinite',mixBlendMode:'overlay'}}/>
-
-        {/* Top shimmer */}
-        <div style={{position:'absolute',top:0,left:'7%',right:'7%',height:'1px',background:'linear-gradient(90deg,transparent,rgba(220,105,0,0.72),rgba(255,175,55,0.82),rgba(220,105,0,0.72),transparent)',backgroundSize:'200% 100%',animation:'divShimmer 4.2s linear infinite'}}/>
+      {/* ── CARD ── */}
+      <div
+        ref={cardRef}
+        className={`card-anim${shake?' card-shake':''}`}
+        style={{
+          position:'relative',zIndex:10,
+          width:'min(92vw,400px)',
+          background:T.cardBg,
+          borderRadius:16,
+          border:`1px solid ${T.cardBorder}`,
+          backdropFilter:'blur(40px) saturate(2.2)',
+          WebkitBackdropFilter:'blur(40px) saturate(2.2)',
+          padding:'clamp(1.6rem,4vw,2.2rem) clamp(1.4rem,4vw,2rem)',
+          overflow:'hidden',
+        }}
+      >
+        {/* top edge shimmer */}
+        <div style={{
+          position:'absolute',top:0,left:'8%',right:'8%',height:1,
+          background:'linear-gradient(90deg,transparent,rgba(255,255,255,0.10),rgba(255,255,255,0.20),rgba(255,255,255,0.10),transparent)',
+        }}/>
 
         <div style={{position:'relative',zIndex:2}}>
-          <LightStrip/>
+          <BulbStrip typing={typing}/>
 
-          <div style={{textAlign:'center',marginBottom:'1.2rem',marginTop:'2px'}}>
-            <p style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.58rem',letterSpacing:'0.30em',textTransform:'uppercase',color:'rgba(220,220,210,0.45)',marginBottom:'0.55rem'}}>// do you copy?</p>
-            <h1 className="st-title" data-text="RECURSION HELL"
-              style={{fontFamily:'"Libre Baskerville",Georgia,"Times New Roman",serif',fontSize:'clamp(1.55rem,5.5vw,2.05rem)',fontWeight:700,letterSpacing:'0.060em',lineHeight:1.06,margin:0,background:'linear-gradient(180deg,#FFE566 0%,#FFAA00 25%,#FF6500 55%,#FF2200 80%,#961000 100%)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text'}}>
-              RECURSION HELL
+          {/* title */}
+          <div style={{textAlign:'center',margin:'14px 0 22px'}}>
+            <h1 className="title-flicker" style={{
+              fontFamily:'"Cinzel",serif',fontWeight:900,
+              lineHeight:.95,letterSpacing:'.05em',
+              display:'flex',flexDirection:'column',alignItems:'center',gap:'.02em',
+            }}>
+              <span style={{
+                fontSize:'clamp(2.1rem,7.8vw,3.0rem)',
+                background:`linear-gradient(175deg,${T.titleTop} 0%,#8B0000 60%,${T.titleBot} 100%)`,
+                WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',
+                filter:'drop-shadow(0 1px 4px rgba(130,0,0,0.40))',
+              }}>RECURSION</span>
+              <span style={{
+                fontSize:'clamp(2.4rem,8.8vw,3.4rem)',
+                background:'linear-gradient(175deg,#A80000 0%,#5A0000 55%,#2A0000 100%)',
+                WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',
+                filter:'drop-shadow(0 1px 4px rgba(100,0,0,0.35))',
+              }}>HELL</span>
             </h1>
-            <p style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.56rem',color:'rgba(220,220,210,0.35)',letterSpacing:'0.20em',marginTop:'0.48rem'}}>THE &nbsp; UPSIDE &nbsp; DOWN &nbsp; ∞</p>
+            <p style={{
+              fontFamily:'"Share Tech Mono",monospace',fontSize:'.50rem',
+              letterSpacing:'.26em',color:T.accent,marginTop:10,textTransform:'uppercase',
+            }}>The Upside Down &nbsp;∞</p>
           </div>
 
-          <div style={{height:'1px',marginBottom:'1.25rem',background:'linear-gradient(90deg,transparent,rgba(170,60,0,0.48),rgba(235,115,0,0.52),rgba(170,60,0,0.48),transparent)'}}/>
+          {/* divider */}
+          <div style={{
+            height:1,marginBottom:20,
+            background:'linear-gradient(90deg,transparent,rgba(170,50,0,0.32),rgba(210,75,0,0.46),rgba(170,50,0,0.32),transparent)',
+          }}/>
 
+          {/* error */}
           {error&&(
-            <div style={{display:'flex',alignItems:'flex-start',gap:'0.5rem',background:'rgba(105,14,0,0.36)',border:'1px solid rgba(185,38,0,0.42)',borderRadius:'7px',padding:'9px 13px',marginBottom:'1rem',fontFamily:'"Share Tech Mono",monospace',fontSize:'0.80rem',color:'#F5ECD7',lineHeight:1.45}}>
-              <span style={{color:'#FF5200',flexShrink:0}}>⚠</span>{error}
+            <div style={{
+              display:'flex',gap:8,alignItems:'flex-start',
+              background:'rgba(90,0,0,0.22)',border:'1px solid rgba(160,0,0,0.28)',
+              borderRadius:8,padding:'9px 13px',marginBottom:14,
+              fontFamily:'"Share Tech Mono",monospace',fontSize:'.80rem',color:'#EDE0D4',lineHeight:1.5,
+            }}>
+              <span style={{color:'#DD2200',flexShrink:0,marginTop:1}}>⚠</span>{error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} style={{display:'flex',flexDirection:'column',gap:'1rem'}}>
+          {/* form */}
+          <div style={{display:'flex',flexDirection:'column',gap:16}}>
             <div>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'0.38rem'}}>
-                <label style={{fontFamily:'"Barlow",sans-serif',fontSize:'0.78rem',fontWeight:600,color:'rgba(235,235,225,0.85)'}}>Team Name</label>
-                <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.54rem',color:'rgba(200,200,190,0.35)',letterSpacing:'0.08em'}}>IDENTIFIER</span>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:6}}>
+                <label style={{fontFamily:'"Barlow",sans-serif',fontSize:'.80rem',fontWeight:600,color:T.label}}>Team Name</label>
+                <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'.48rem',letterSpacing:'.08em',color:T.muted}}>IDENTIFIER</span>
               </div>
-              <input className="hell-input" value={teamName} onChange={e=>setTeamName(e.target.value)} autoComplete="username" spellCheck={false} placeholder="e.g. StackSmashers"/>
+              <input className="hell-input" value={team} onChange={e=>{setTeam(e.target.value);onType()}} autoComplete="username" spellCheck={false} placeholder="e.g. StackSmashers"/>
             </div>
+
             <div>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'0.38rem'}}>
-                <label style={{fontFamily:'"Barlow",sans-serif',fontSize:'0.78rem',fontWeight:600,color:'rgba(235,235,225,0.85)'}}>Password</label>
-                <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.54rem',color:'rgba(200,200,190,0.35)',letterSpacing:'0.08em'}}>ENCRYPTED</span>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:6}}>
+                <label style={{fontFamily:'"Barlow",sans-serif',fontSize:'.80rem',fontWeight:600,color:T.label}}>Password</label>
+                <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'.48rem',letterSpacing:'.08em',color:T.muted}}>ENCRYPTED</span>
               </div>
-              <input className="hell-input" type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password" placeholder="••••••••"/>
+              <input className="hell-input" type="password" value={pass} onChange={e=>{setPass(e.target.value);onType()}} autoComplete="current-password" placeholder="••••••••"/>
             </div>
-            <button type="submit" disabled={!canSubmit} className={`login-btn ${canSubmit?'btn-on':'btn-off'}`} style={{marginTop:'0.25rem'}}>
+
+            <button onClick={handleSubmit} disabled={!canSubmit} className={canSubmit?'btn-on':'btn-off'} style={{marginTop:10}}>
               {loading?(
-                <span style={{display:'inline-flex',alignItems:'center',gap:'0.5rem',justifyContent:'center'}}>
-                  <span className="spin" style={{display:'inline-block',width:13,height:13,borderRadius:'50%',border:'2px solid rgba(255,255,255,0.22)',borderTop:'2px solid #fff'}}/>
+                <span style={{display:'inline-flex',alignItems:'center',gap:8,justifyContent:'center'}}>
+                  <span className="spin" style={{display:'inline-block',width:12,height:12,borderRadius:'50%',border:'2px solid rgba(255,255,255,0.15)',borderTopColor:'#EDE0D4'}}/>
                   Descending…
                 </span>
               ):'Descent'}
             </button>
-          </form>
+          </div>
 
-          <div style={{marginTop:'1.1rem',paddingTop:'0.8rem',borderTop:'1px solid rgba(120,40,0,0.18)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.53rem',color:'rgba(210,210,200,0.22)',letterSpacing:'0.06em'}}>// v1.0 — stack depth: ∞</span>
-            <span style={{display:'flex',alignItems:'center',gap:'0.32rem'}}>
-              <span style={{width:5,height:5,borderRadius:'50%',background:'#FF3800',boxShadow:'0 0 7px rgba(255,56,0,0.92)',animation:'blink 1.5s step-start infinite',display:'inline-block'}}/>
-              <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'0.53rem',color:'rgba(220,220,210,0.45)',letterSpacing:'0.06em'}}>CONTEST LIVE</span>
+          {/* footer */}
+          <div style={{
+            marginTop:18,paddingTop:14,
+            borderTop:'1px solid rgba(130,35,0,0.12)',
+            display:'flex',alignItems:'center',justifyContent:'space-between',
+          }}>
+            <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'.48rem',color:T.muted,letterSpacing:'.05em'}}>
+              v1.0 &nbsp;·&nbsp; depth: ∞
+            </span>
+            <span style={{display:'flex',alignItems:'center',gap:5}}>
+              <span style={{width:5,height:5,borderRadius:'50%',background:'#FF4400',boxShadow:'0 0 6px rgba(255,55,0,0.85)',animation:'blink 2s step-start infinite',display:'inline-block'}}/>
+              <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'.48rem',color:'rgba(210,85,35,0.52)',letterSpacing:'.05em'}}>CONTEST LIVE</span>
             </span>
           </div>
         </div>
