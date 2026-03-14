@@ -37,11 +37,11 @@ function runSeed() {
   `);
 
   const insertQuestion = db.prepare(`
-    INSERT INTO questions (node_id, question_type, question_text, answer, difficulty)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO questions (node_id, pool_type, question_type, question_text, answer, difficulty)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
 
-  const insertMany = db.transaction((nodes: Array<[number, string, string, number | null, number | null, number]>, edges: Array<[number, number]>, questions: Array<[number, string, string, string, number]>) => {
+  const insertMany = db.transaction((nodes: Array<[number, string, string, number | null, number | null, number]>, edges: Array<[number, number]>, questions: Array<[number, string, string, string, string, number]>) => {
     for (const n of nodes) insertNode.run(...n);
     for (const e of edges) insertEdge.run(e[0], e[1]);
     for (const q of questions) insertQuestion.run(...q);
@@ -85,25 +85,31 @@ function runSeed() {
   // Penalty chain: P1 → P2 → … → P7
   for (let i = 19; i <= 24; i++) edges.push([i, i + 1]);
 
-  // Questions: ≥5 for normal/checkpoint/final, ≥7 for penalty (difficulty 2)
-  const questions: Array<[number, string, string, string, number]> = [];
+  // One shared pool of 7 questions for all main-path nodes; one shared pool of 5 for all penalty nodes.
+  const questions: Array<[number, string, string, string, string, number]> = [];
+  const MAIN_POOL_NODE_ID = 1;
+  const PENALTY_POOL_NODE_ID = 19;
 
-  const addQuestions = (nodeId: number, count: number, difficulty: number) => {
-    for (let i = 1; i <= count; i++) {
-      questions.push([
-        nodeId,
-        'text',
-        `Placeholder question ${i} for node ${nodeId}. Replace with real content.`,
-        `answer_${nodeId}_${i}`,
-        difficulty,
-      ]);
-    }
-  };
-
-  addQuestions(1, 5, 1);   // START
-  for (let id = 2; id <= 18; id++) addQuestions(id, 5, 1); // 1–17
-  for (let id = 19; id <= 25; id++) addQuestions(id, 7, 2); // P1–P7 (hard)
-  addQuestions(26, 5, 1);  // FINAL
+  for (let i = 1; i <= 7; i++) {
+    questions.push([
+      MAIN_POOL_NODE_ID,
+      'main',
+      'text',
+      `Main path question ${i}. Replace with real content.`,
+      `answer_main_${i}`,
+      1,
+    ]);
+  }
+  for (let i = 1; i <= 5; i++) {
+    questions.push([
+      PENALTY_POOL_NODE_ID,
+      'penalty',
+      'text',
+      `Penalty question ${i}. Replace with real content.`,
+      `answer_penalty_${i}`,
+      2,
+    ]);
+  }
 
   insertMany(nodes, edges, questions);
 

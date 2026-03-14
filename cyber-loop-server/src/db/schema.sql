@@ -30,12 +30,21 @@ CREATE TABLE IF NOT EXISTS node_edges (
 CREATE TABLE IF NOT EXISTS questions (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   node_id       INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+  pool_type     TEXT NOT NULL CHECK (pool_type IN ('main','penalty')) DEFAULT 'main',
   question_type TEXT NOT NULL CHECK (question_type IN ('text','image','pdf')) DEFAULT 'text',
   question_text TEXT,
   file_path     TEXT,
   answer        TEXT NOT NULL,
   difficulty    INTEGER NOT NULL DEFAULT 1,
   created_at    TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS participant_question_assignment (
+  participant_id INTEGER NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+  node_id        INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+  question_id    INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+  created_at     TEXT DEFAULT (datetime('now')),
+  UNIQUE(participant_id, node_id)
 );
 
 CREATE TABLE IF NOT EXISTS participant_node_progress (

@@ -31,11 +31,19 @@ export const gameService = {
       return { ok: false, status: 'not_found' };
     }
 
-    const { data: question, error: qError } = await supabase
-      .from('questions')
-      .select('node_id, file_path, question_type')
-      .eq('id', qId)
-      .maybeSingle();
+    const [{ data: question, error: qError }, { data: assignment }] = await Promise.all([
+      supabase
+        .from('questions')
+        .select('node_id, file_path, question_type')
+        .eq('id', qId)
+        .maybeSingle(),
+      supabase
+        .from('participant_question_assignment')
+        .select('node_id')
+        .eq('participant_id', participantId)
+        .eq('question_id', qId)
+        .maybeSingle(),
+    ]);
 
     if (qError || !question) return { ok: false, status: 'not_found' };
     const filePath = (question as { file_path: string | null }).file_path;
@@ -43,7 +51,7 @@ export const gameService = {
       return { ok: false, status: 'not_found' };
     }
 
-    const nodeId = (question as { node_id: number }).node_id;
+    const nodeId = (assignment as { node_id: number } | null)?.node_id ?? (question as { node_id: number }).node_id;
 
     const { data: progress, error: pError } = await supabase
       .from('participant_node_progress')

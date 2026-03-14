@@ -34,6 +34,7 @@ interface GameStateRow {
 export interface QuestionRow {
   id: number;
   node_id: number;
+  pool_type: 'main' | 'penalty';
   question_type: 'text' | 'image' | 'pdf';
   question_text: string | null;
   file_path: string | null;
@@ -199,142 +200,62 @@ export async function getNextQuestion(
   nodeId: number,
   participantId: number
 ): Promise<QuestionRow | null> {
-  const { data: gsRow, error: gsError } = await supabase
-    .from('participant_game_state')
-    .select('*')
+  const poolType = await getPoolTypeForNode(nodeId);
+  if (!poolType) return null;
+
+  const { data: existingAssignment, error: assignErr } = await supabase
+    .from('participant_question_assignment')
+    .select('question_id')
     .eq('participant_id', participantId)
+    .eq('node_id', nodeId)
     .maybeSingle();
 
-  if (gsError) {
-    throw new Error('Failed to load game state');
-  }
+  if (assignErr) throw new Error('Failed to load assignment');
 
-  const gameState = (gsRow || {
-    participant_id: participantId,
-    total_correct: 0,
-    total_mistakes: 0,
-    score: 0,
-    last_checkpoint_id: null,
-    current_node_id: null,
-    current_question_id: null,
-    last_question_id: null,
-    penalty_nodes_unlocked: 0,
-    is_finished: 0,
-    started_at: null,
-    finished_at: null,
-    updated_at: null,
-  }) as GameStateRow;
-
-  const lastQuestionId = gameState.last_question_id ?? null;
-  const checkpointId = gameState.last_checkpoint_id ?? null;
-
-  let checkpointSolvedAt: string | null = null;
-
-  if (checkpointId != null) {
-    const { data: cpRow, error: cpError } = await supabase
-      .from('participant_node_progress')
-      .select('solved_at')
-      .eq('participant_id', participantId)
-      .eq('node_id', checkpointId)
+  if (existingAssignment) {
+    const qId = (existingAssignment as { question_id: number }).question_id;
+    const { data: question, error: qErr } = await supabase
+      .from('questions')
+      .select('*')
+      .eq('id', qId)
       .maybeSingle();
-
-    if (cpError) {
-      throw new Error('Failed to load checkpoint progress');
-    }
-
-    checkpointSolvedAt = (cpRow as { solved_at: string | null } | null)?.solved_at ?? null;
+    if (qErr || !question) return null;
+    return question as QuestionRow;
   }
 
-  const { data: questions, error: qError } = await supabase
+  const { data: poolQuestions, error: qError } = await supabase
     .from('questions')
     .select('*')
-    .eq('node_id', nodeId);
+    .eq('pool_type', poolType);
 
-  if (qError || !questions || questions.length === 0) {
-    return null;
-  }
+  if (qError || !poolQuestions || poolQuestions.length === 0) return null;
 
-  const questionIds = (questions as QuestionRow[]).map((q) => q.id);
-
-  const { data: attempts, error: aError } = await supabase
-    .from('question_attempts')
-    .select('question_id, node_id, is_correct, attempted_at')
+  const { data: assignments, error: aErr } = await supabase
+    .from('participant_question_assignment')
+    .select('question_id')
     .eq('participant_id', participantId)
-    .in('question_id', questionIds);
+    .in('question_id', (poolQuestions as QuestionRow[]).map((q) => q.id));
 
-  if (aError) {
-    throw new Error('Failed to load question attempts');
-  }
+  if (aErr) throw new Error('Failed to load assignments');
 
-  const attemptsList = (attempts || []) as QuestionAttemptRow[];
+  const assignedIds = new Set(
+    ((assignments || []) as { question_id: number }[]).map((r) => r.question_id)
+  );
+  const available = (poolQuestions as QuestionRow[]).filter((q) => !assignedIds.has(q.id));
+  if (available.length === 0) return null;
 
-  const burnedQuestionIds = new Set<number>();
-  if (checkpointSolvedAt) {
-    for (const a of attemptsList) {
-      const isCorrect = typeof a.is_correct === 'number' ? a.is_correct === 1 : a.is_correct;
-      if (isCorrect && a.attempted_at <= checkpointSolvedAt) {
-        burnedQuestionIds.add(a.question_id);
-      }
-    }
-  }
+  const chosen = available[Math.floor(Math.random() * available.length)];
 
-  function pickQuestion(relaxCheckpoint: boolean): QuestionRow | null {
-    let candidates = questions as QuestionRow[];
-
-    if (lastQuestionId != null) {
-      candidates = candidates.filter((q) => q.id !== lastQuestionId);
-    }
-
-    if (!relaxCheckpoint && checkpointSolvedAt) {
-      candidates = candidates.filter((q) => !burnedQuestionIds.has(q.id));
-    }
-
-    if (candidates.length === 0) return null;
-
-    const hasCorrectMap = new Map<number, boolean>();
-    for (const q of candidates) {
-      const anyCorrect = attemptsList.some((a) => {
-        if (a.question_id !== q.id) return false;
-        const isCorrect = typeof a.is_correct === 'number' ? a.is_correct === 1 : a.is_correct;
-        return isCorrect;
-      });
-      hasCorrectMap.set(q.id, anyCorrect);
-    }
-
-    const unsolved = candidates.filter((q) => !hasCorrectMap.get(q.id));
-    const pool = unsolved.length > 0 ? unsolved : candidates;
-
-    if (pool.length === 0) return null;
-
-    const idx = Math.floor(Math.random() * pool.length);
-    return pool[idx];
-  }
-
-  let chosen = pickQuestion(false);
-
-  if (!chosen) {
-    chosen = pickQuestion(true);
-  }
-
-  if (!chosen) {
-    let pool = questions as QuestionRow[];
-    if (lastQuestionId != null) {
-      const withoutLast = pool.filter((q) => q.id !== lastQuestionId);
-      if (withoutLast.length > 0) {
-        pool = withoutLast;
-      }
-    }
-    const idx = Math.floor(Math.random() * pool.length);
-    chosen = pool[idx];
-  }
+  await supabase.from('participant_question_assignment').insert({
+    participant_id: participantId,
+    node_id: nodeId,
+    question_id: chosen.id,
+  });
 
   await supabase
     .from('participant_game_state')
     .upsert(
-      {
-        participant_id: participantId,
-        last_question_id: chosen.id,
-      },
+      { participant_id: participantId, last_question_id: chosen.id },
       { onConflict: 'participant_id' }
     );
 
@@ -363,11 +284,20 @@ export async function submitAnswer(
 
   const questionRow = question as QuestionRow;
 
+  const { data: assignmentRow } = await supabase
+    .from('participant_question_assignment')
+    .select('node_id')
+    .eq('participant_id', participantId)
+    .eq('question_id', qId)
+    .maybeSingle();
+
+  const gameNodeId = (assignmentRow as { node_id: number } | null)?.node_id ?? questionRow.node_id;
+
   const { data: progressRow, error: progErr } = await supabase
     .from('participant_node_progress')
     .select('status')
     .eq('participant_id', participantId)
-    .eq('node_id', questionRow.node_id)
+    .eq('node_id', gameNodeId)
     .maybeSingle();
 
   if (progErr || !progressRow) {
@@ -413,14 +343,14 @@ export async function submitAnswer(
   await supabase.from('question_attempts').insert({
     participant_id: participantId,
     question_id: qId,
-    node_id: questionRow.node_id,
+    node_id: gameNodeId,
     is_correct: isCorrect ? 1 : 0,
     attempted_at: timestamp,
   });
 
   const updated = isCorrect
-    ? await handleCorrectAnswer(participantId, questionRow, gameState, timestamp)
-    : await handleWrongAnswer(participantId, questionRow, gameState, timestamp);
+    ? await handleCorrectAnswer(participantId, questionRow, gameState, timestamp, gameNodeId)
+    : await handleWrongAnswer(participantId, questionRow, gameState, timestamp, gameNodeId);
 
   const { error: upsertErr } = await supabase
     .from('participant_game_state')
@@ -431,7 +361,7 @@ export async function submitAnswer(
         total_mistakes: updated.total_mistakes,
         score: updated.score,
         last_checkpoint_id: updated.last_checkpoint_id,
-        current_node_id: questionRow.node_id,
+        current_node_id: gameNodeId,
         current_question_id: qId,
         last_question_id: updated.last_question_id,
         penalty_nodes_unlocked: updated.penalty_nodes_unlocked,
@@ -453,14 +383,15 @@ async function handleCorrectAnswer(
   participantId: number,
   question: QuestionRow,
   gameState: GameStateRow,
-  timestamp: string
+  timestamp: string,
+  gameNodeId: number
 ): Promise<GameStateRow> {
   await supabase
     .from('participant_node_progress')
     .upsert(
       {
         participant_id: participantId,
-        node_id: question.node_id,
+        node_id: gameNodeId,
         status: 'solved',
         solved_at: timestamp,
         unlocked_at: gameState.started_at ?? timestamp,
@@ -477,7 +408,7 @@ async function handleCorrectAnswer(
   const { data: edges } = await supabase
     .from('node_edges')
     .select('to_node')
-    .eq('from_node', question.node_id);
+    .eq('from_node', gameNodeId);
 
   if (edges && edges.length > 0) {
     for (const e of edges as { to_node: number }[]) {
@@ -496,11 +427,11 @@ async function handleCorrectAnswer(
   }
 
   const isCheckpoint =
-    nodeConfig.checkpointNodeIds.includes(question.node_id) ||
-    (await isCheckpointNode(question.node_id));
+    nodeConfig.checkpointNodeIds.includes(gameNodeId) ||
+    (await isCheckpointNode(gameNodeId));
 
   if (isCheckpoint) {
-    updated.last_checkpoint_id = question.node_id;
+    updated.last_checkpoint_id = gameNodeId;
   }
 
   const threshold = 17 + Math.min(updated.total_mistakes, 7);
@@ -518,7 +449,7 @@ async function handleCorrectAnswer(
       );
   }
 
-  if (question.node_id === nodeConfig.finalNodeId) {
+  if (gameNodeId === nodeConfig.finalNodeId) {
     updated.is_finished = 1;
     updated.finished_at = timestamp;
 
@@ -553,7 +484,8 @@ async function handleWrongAnswer(
   participantId: number,
   question: QuestionRow,
   gameState: GameStateRow,
-  timestamp: string
+  timestamp: string,
+  _gameNodeId: number
 ): Promise<GameStateRow> {
   const updated: GameStateRow = {
     ...gameState,
@@ -650,7 +582,20 @@ async function getPenaltyNodeIdByIndex(index: number): Promise<number | null> {
   return row ? row.id : null;
 }
 
-function computeScore(totalCorrect: number, totalMistakes: number): number {
+/** Returns which question pool to use for this node: main path (7 questions) or penalty (5 questions). */
+async function getPoolTypeForNode(nodeId: number): Promise<'main' | 'penalty' | null> {
+  const { data, error } = await supabase
+    .from('nodes')
+    .select('node_type')
+    .eq('id', nodeId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  const nodeType = (data as { node_type: NodeType }).node_type;
+  return nodeType === 'penalty' ? 'penalty' : 'main';
+}
+
+export function computeScore(totalCorrect: number, totalMistakes: number): number {
   const base = totalCorrect * 10;
   const penalty = totalMistakes * 2;
   return Math.max(0, base - penalty);

@@ -56,6 +56,7 @@ const defaultQuestions = [
   {
     id: 101,
     node_id: 1,
+    pool_type: 'main',
     question_type: 'text',
     question_text: 'Test question?',
     file_path: null,
@@ -102,15 +103,30 @@ vi.mock('./config/supabase', () => {
                 : defaultProgress[0];
             return Promise.resolve({ data: prog ?? null, error: null });
           }
-          if (table === 'questions') {
+          if (table === 'questions' && field !== 'pool_type') {
             return Promise.resolve({ data: defaultQuestions[0], error: null });
           }
           if (table === 'nodes') {
             const n = field === 'id' ? defaultNodes.find((n) => n.id === value) : null;
             return Promise.resolve({ data: n ?? null, error: null });
           }
+          if (table === 'participant_question_assignment') {
+            return {
+              eq: (f2: string) => ({
+                maybeSingle: () =>
+                  Promise.resolve({
+                    data: f2 === 'question_id' ? { node_id: 1 } : null,
+                    error: null,
+                  }),
+              }),
+              in: () => Promise.resolve({ data: [], error: null }),
+            };
+          }
           return Promise.resolve({ data: null, error: null });
         };
+        if (table === 'questions' && field === 'pool_type') {
+          return { then: (resolve: (v: unknown) => void) => Promise.resolve({ data: defaultQuestions, error: null }).then(resolve) };
+        }
         const result = {
           eq: (f2: string, v2: unknown) =>
             table === 'participant_node_progress' && f2 === 'node_id'
