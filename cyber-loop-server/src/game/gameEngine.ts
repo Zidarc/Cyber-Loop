@@ -29,6 +29,7 @@ interface GameStateRow {
   started_at: string | null;
   finished_at: string | null;
   updated_at: string | null;
+  penalty_counter: number
 }
 
 export interface QuestionRow {
@@ -471,6 +472,7 @@ export async function submitAnswer(
         is_finished: updatedState.is_finished,
         finished_at: updatedState.finished_at,
         updated_at: timestamp,
+        penalty_counter: updatedState.penalty_counter,
       },
       { onConflict: 'participant_id' }
     );
@@ -517,6 +519,11 @@ async function handleCorrectAnswer(
     current_node_id: gameNodeId,
   };
 
+  // If this is a penalty node being solved, decrease penalty_counter by 1
+  if (currentNodeType === 'penalty') {
+    updated.penalty_counter = Math.max(0, (gameState.penalty_counter ?? 0) - 1)
+  }
+
   // Update last_checkpoint_id if this is start or checkpoint
   if (currentNodeType === 'start' || currentNodeType === 'checkpoint') {
     updated.last_checkpoint_id = gameNodeId;
@@ -536,7 +543,12 @@ async function handleCorrectAnswer(
       .maybeSingle();
 
     const teamName = (participant as { team_name: string } | null)?.team_name ?? 'Unknown';
-
+    const { count: solvedCount } = await supabase
+      .from('participant_node_progress')
+      .select('node_id', { count: 'exact', head: true })
+      .eq('participant_id', participantId)
+      .eq('status', 'solved')
+      
     await supabase.from('leaderboard').upsert(
       {
         participant_id: participantId,
@@ -544,6 +556,8 @@ async function handleCorrectAnswer(
         score: finalScore,
         total_correct: updated.total_correct,
         total_mistakes: updated.total_mistakes,
+        penalty_counter: updated.penalty_counter,
+        puzzles_solved: solvedCount ?? 0,
         finished_at: timestamp,
       },
       { onConflict: 'participant_id' }
@@ -667,6 +681,7 @@ async function handleWrongAnswer(
     ...gameState,
     total_mistakes: gameState.total_mistakes + 1,
     last_question_id: question.id,
+    penalty_counter: (gameState.penalty_counter ?? 0) + 1,
   };
 
   // ── Penalty node wrong answer: isolated path ──
@@ -841,42 +856,46 @@ export async function computeScore(participantId: number): Promise<number> {
   const { data: progressRows } = await supabase
     .from('participant_node_progress')
     .select('node_id, status')
-    .eq('participant_id', participantId);
+    .eq('participant_id', participantId)
 
-  if (!progressRows || progressRows.length === 0) return 0;
+  if (!progressRows || progressRows.length === 0) return 0
 
-  const nodeIds = (progressRows as { node_id: number; status: string }[]).map((p) => p.node_id);
+  const nodeIds = (progressRows as { node_id: number; status: string }[]).map(p => p.node_id)
 
   const { data: nodeRows } = await supabase
     .from('nodes')
     .select('id, node_type')
-    .in('id', nodeIds);
+    .in('id', nodeIds)
 
-  if (!nodeRows) return 0;
+  if (!nodeRows) return 0
 
-  const nodeTypeMap = new Map<number, NodeType>();
+  const nodeTypeMap = new Map<number, NodeType>()
   for (const n of nodeRows as { id: number; node_type: NodeType }[]) {
-    nodeTypeMap.set(n.id, n.node_type);
+    nodeTypeMap.set(n.id, n.node_type)
   }
 
-  let normalPoints = 0;
-  let checkpointPoints = 0;
-  let finalPoints = 0;
-  let unsolvedPenaltyCount = 0;
+  let normalPoints = 0
+  let checkpointPoints = 0
+  let finalPoints = 0
 
   for (const p of progressRows as { node_id: number; status: string }[]) {
-    const nodeType = nodeTypeMap.get(p.node_id);
-    if (!nodeType) continue;
-
-    if (p.status === 'solved') {
-      if (nodeType === 'normal')                                   normalPoints     += 25;
-      else if (nodeType === 'start' || nodeType === 'checkpoint')  checkpointPoints += 30;
-      else if (nodeType === 'final')                               finalPoints      += 50;
-    } else if (p.status === 'unlocked' && nodeType === 'penalty') {
-      unsolvedPenaltyCount += 1;
-    }
+    if (p.status !== 'solved') continue
+    const nodeType = nodeTypeMap.get(p.node_id)
+    if (!nodeType) continue
+    if (nodeType === 'normal')                                  normalPoints     += 25
+    else if (nodeType === 'start' || nodeType === 'checkpoint') checkpointPoints += 30
+    else if (nodeType === 'final')                              finalPoints      += 50
   }
 
-  const total = normalPoints + checkpointPoints + finalPoints - (unsolvedPenaltyCount * 3);
-  return Math.max(0, total);
+  // Get penalty_counter from game state
+  const { data: gsRow } = await supabase
+    .from('participant_game_state')
+    .select('penalty_counter')
+    .eq('participant_id', participantId)
+    .maybeSingle()
+
+  const penaltyCounter = (gsRow as { penalty_counter: number } | null)?.penalty_counter ?? 0
+
+  const total = normalPoints + checkpointPoints + finalPoints - (penaltyCounter * 3)
+  return Math.max(0, total)
 }
