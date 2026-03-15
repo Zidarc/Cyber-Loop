@@ -15,9 +15,6 @@ export const gameAnswerValidation = [
   body('questionId')
     .isInt({ min: 1 })
     .withMessage('questionId must be a positive integer'),
-  body('nodeId')
-    .isInt({ min: 1 })
-    .withMessage('nodeId must be a positive integer'),
   body('answer')
     .trim()
     .isLength({ min: 1, max: 500 })

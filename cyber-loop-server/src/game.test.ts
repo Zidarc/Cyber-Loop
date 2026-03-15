@@ -243,10 +243,14 @@ describe('Game API', () => {
     const res = await request(app)
       .post('/api/game/answer')
       .set('Authorization', `Bearer ${token}`)
-      .send({ questionId: 101, nodeId: 1, answer: 'answer_1_1' })
+      .send({ questionId: 101, answer: 'answer_1_1' })
       .expect(200);
     expect(res.body).toHaveProperty('nodes');
     expect(res.body).toHaveProperty('gameState');
+    expect(res.body).toHaveProperty('submitResult');
+    expect(res.body.submitResult).toMatchObject({
+      correct: expect.any(Boolean),
+    });
     expect(res.body.gameState).toMatchObject({
       totalCorrect: expect.any(Number),
       totalMistakes: expect.any(Number),

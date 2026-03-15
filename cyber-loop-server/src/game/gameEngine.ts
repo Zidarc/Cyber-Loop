@@ -506,7 +506,6 @@ async function handleCorrectAnswer(
         node_id: gameNodeId,
         status: 'solved',
         solved_at: timestamp,
-        unlocked_at: timestamp,
       },
       { onConflict: 'participant_id,node_id' }
     );

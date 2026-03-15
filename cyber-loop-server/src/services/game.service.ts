@@ -19,9 +19,10 @@ export const gameService = {
   },
 
   async submitAnswer(participantId: number, questionId: number, answer: string) {
-    return engineSubmitAnswer(participantId, questionId, answer);
+    const submitResult = await engineSubmitAnswer(participantId, questionId, answer);
+    const fullState = await getFullGameState(participantId);
+    return { ...fullState, submitResult };
   },
-
   async getQuestionFile(
     participantId: number,
     questionId: number

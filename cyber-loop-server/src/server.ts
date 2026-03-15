@@ -2,20 +2,14 @@ import 'dotenv/config';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
-import path from 'path';
-import fs from 'fs';
 import authRoutes from './routes/auth.routes';
 import gameRoutes from './routes/game.routes';
-import { db } from './config/db';
+
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
-const schemaPath = path.join(process.cwd(), 'src', 'db', 'schema.sql');
-if (fs.existsSync(schemaPath)) {
-  const schema = fs.readFileSync(schemaPath, 'utf8');
-  db.exec(schema);
-}
+
 
 app.use(helmet());
 app.use(cors({ origin: process.env.ALLOWED_ORIGINS || '*' }));
