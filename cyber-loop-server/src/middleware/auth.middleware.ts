@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { authService, hashToken } from '../services/auth.service';
 import type { JwtPayload } from '../services/auth.service';
+import { getCompetitionStatus } from '../services/competition.service'; // ← add
 
 const JWT_SECRET = process.env.JWT_SECRET || 'Well ofc this isnt the key';
 
@@ -33,6 +34,13 @@ export async function verifyToken(
     }
     if (row.active_token_hash !== tokenHash) {
       res.status(403).json({ error: 'Session invalidated' });
+      return;
+    }
+
+    // Competition active check ← add this block
+    const competition = await getCompetitionStatus();
+    if (!competition.isActive) {
+      res.status(403).json({ error: 'Competition has ended' });
       return;
     }
 

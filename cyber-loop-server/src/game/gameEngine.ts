@@ -409,6 +409,7 @@ export async function submitAnswer(
     total_correct: 0,
     total_mistakes: 0,
     score: 0,
+    penalty_counter: 0, 
     last_checkpoint_id: null,
     current_node_id: null,
     current_question_id: null,
@@ -548,7 +549,7 @@ async function handleCorrectAnswer(
       .select('node_id', { count: 'exact', head: true })
       .eq('participant_id', participantId)
       .eq('status', 'solved')
-      
+
     await supabase.from('leaderboard').upsert(
       {
         participant_id: participantId,

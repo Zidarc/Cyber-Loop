@@ -4,12 +4,12 @@ import helmet from 'helmet';
 import cors from 'cors';
 import authRoutes from './routes/auth.routes';
 import gameRoutes from './routes/game.routes';
-
+import leaderboardRouter from './routes/leaderboard';
+import adminRouter from './routes/admin.route';
+import competitionRouter from './routes/competition.route';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
-
-
 
 app.use(helmet());
 app.use(cors({ origin: process.env.ALLOWED_ORIGINS || '*' }));
@@ -18,6 +18,9 @@ app.use(express.urlencoded({ extended: false }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/game', gameRoutes);
+app.use('/api/leaderboard', leaderboardRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api/competition', competitionRouter);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });

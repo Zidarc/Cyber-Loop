@@ -1,6 +1,7 @@
 import { supabase } from '../config/supabase';
 import { isAllowedFilePath } from '../utils/filePath';
 import { getFullGameState, getNextQuestion, submitAnswer as engineSubmitAnswer } from '../game/gameEngine';
+import { getCompetitionStatus } from './competition.service';
 
 const BUCKET = process.env.SUPABASE_BUCKET_QUESTIONS?.trim() || 'question-assets';
 const SIGNED_URL_EXPIRES_SEC = 60;
@@ -11,7 +12,18 @@ export type GetQuestionFileResult =
 
 export const gameService = {
   async getState(participantId: number) {
-    return getFullGameState(participantId);
+    const [gameState, competition] = await Promise.all([
+      getFullGameState(participantId),
+      getCompetitionStatus(),
+    ]);
+
+    return {
+      ...gameState,
+      competition: {
+        endsAt: competition.endsAt,
+        remainingMs: competition.remainingMs,
+      },
+    };
   },
 
   async getQuestion(nodeId: number, participantId: number) {
@@ -23,6 +35,7 @@ export const gameService = {
     const fullState = await getFullGameState(participantId);
     return { ...fullState, submitResult };
   },
+
   async getQuestionFile(
     participantId: number,
     questionId: number
