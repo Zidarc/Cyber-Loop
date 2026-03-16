@@ -12,7 +12,19 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
 app.use(helmet());
-app.use(cors({ origin: process.env.ALLOWED_ORIGINS || '*' }));
+const ALLOWED = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean)
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true)
+    if (ALLOWED.includes(origin)) return callback(null, true)
+    callback(new Error(`CORS blocked: ${origin}`))
+  },
+  credentials: true,
+}))
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 

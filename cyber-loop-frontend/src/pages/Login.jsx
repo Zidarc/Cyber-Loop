@@ -378,7 +378,7 @@ export default function Login() {
 
       sessionStorage.setItem('token', data.token)
       sessionStorage.setItem('teamName', tn)
-      window.location.assign('/landing')
+      window.location.assign('/gamepage')
 
     } catch {
       setError(getErrorMessage(0, null))
