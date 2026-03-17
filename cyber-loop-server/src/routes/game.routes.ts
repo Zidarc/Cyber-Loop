@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { verifyToken } from '../middleware/auth.middleware';
+import { answerRateLimiter } from '../middleware/rateLimiter';
 import {
   getState,
   getQuestion,
@@ -20,6 +21,6 @@ router.use(verifyToken);
 router.get('/state', getState);
 router.get('/node/:nodeId/question', nodeQuestionValidation, handleValidation, getQuestion);
 router.get('/question/:questionId/file', questionFileValidation, handleValidation, getQuestionFile);
-router.post('/answer', gameAnswerValidation, handleValidation, submitAnswer);
+router.post('/answer', answerRateLimiter, gameAnswerValidation, handleValidation, submitAnswer);
 
 export default router;

@@ -1,24 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Lightning from '../components/Lightning'
 import SplashCursor from '../components/SplashCursor'
+import { apiFetch } from '../lib/api'
+import { supabase } from '../lib/supabase'
 
 /* ══════════════════════════════════════════════════════
    THEME
 ══════════════════════════════════════════════════════ */
 const C = {
-  /* backgrounds */
   bg:          '#050405',
   rowAlt:      'rgba(255,255,255,0.012)',
   rowHov:      'rgba(255,255,255,0.04)',
   youBg:       'rgba(227,18,18,0.08)',
-
-  /* reds */
   red:         '#e31212',
   glowRed:     'rgba(227,18,18,0.35)',
   redDiv:      'rgba(227,18,18,0.30)',
   redBorder:   'rgba(227,18,18,0.25)',
-
-  /* rank colours */
   gold:        '#FFD700',
   goldGlow:    'rgba(255,215,0,0.25)',
   goldBg:      'rgba(255,215,0,0.06)',
@@ -28,32 +25,18 @@ const C = {
   bronze:      '#CD9060',
   bronzeGlow:  'rgba(205,127,50,0.20)',
   bronzeBg:    'rgba(205,127,50,0.05)',
-
-  /* text */
   textPrimary: 'rgba(255,255,255,0.82)',
   textMuted:   'rgba(255,255,255,0.38)',
   textDim:     'rgba(255,255,255,0.18)',
   textHeader:  'rgba(255,255,255,0.32)',
   ash:         'rgba(255,255,255,0.55)',
-
-  /* greens */
   green:       '#4ade80',
   greenMuted:  'rgba(74,222,128,0.55)',
-  greenPen:    'rgba(100,220,100,0.80)',
-  greenPenMut: 'rgba(100,220,100,0.50)',
-
-  /* wrong */
   wrong:       '#f87171',
   wrongMuted:  'rgba(248,113,113,0.50)',
-
-  /* borders */
   border:      'rgba(255,255,255,0.07)',
-
-  /* fonts */
   fontTitle:   '"Cinzel", serif',
   fontMono:    '"Share Tech Mono", monospace',
-
-  /* font sizes */
   fzXs:   '.72rem',
   fzSm:   '.85rem',
   fzBase: '1.00rem',
@@ -62,148 +45,18 @@ const C = {
 }
 
 /* ══════════════════════════════════════════════════════
-   DUMMY DATA  ← replace fetchScores() with real API
-   Shape per team:
-   {
-     rank: number,
-     team: string,
-     score: number,
-     time: string,          // "HH:MM:SS"
-     problems: Array<       // always length 7
-       null                 // unattempted
-       | { solved: true,  solveTime: string }   // "MM:SS"
-       | { solved: false, attempts: number }
-     >,
-     penalties: Array<      // length = penCount (max 5)
-       null
-       | { solved: true,  solveTime: string }
-       | { solved: false, attempts: number }
-     >,
-     penCount: number,      // how many penalty Qs unlocked for this team
-   }
+   MAP API RESPONSE → ROW SHAPE
 ══════════════════════════════════════════════════════ */
-const DUMMY_DATA = [
-  {
-    rank: 1, team: 'NightOwls', score: 1420, time: '01:12:34',
-    problems: [
-      { solved: true,  solveTime: '08:22' },
-      { solved: true,  solveTime: '22:10' },
-      { solved: true,  solveTime: '45:03' },
-      { solved: true,  solveTime: '65:11' },
-      { solved: false, attempts:  2       },
-      { solved: true,  solveTime: '33:44' },
-      null,
-    ],
-    penalties: [
-      { solved: true,  solveTime: '15:20' },
-      { solved: false, attempts:  1       },
-      null, null, null,
-    ],
-    penCount: 2,
-  },
-  {
-    rank: 2, team: 'ByteForce', score: 1310, time: '01:28:10',
-    problems: [
-      { solved: true,  solveTime: '11:05' },
-      { solved: true,  solveTime: '30:22' },
-      { solved: false, attempts:  3       },
-      { solved: true,  solveTime: '70:15' },
-      { solved: true,  solveTime: '55:40' },
-      null, null,
-    ],
-    penalties: [
-      { solved: true, solveTime: '20:10' },
-      null, null, null, null,
-    ],
-    penCount: 1,
-  },
-  {
-    rank: 3, team: 'KJNWKJWEN', score: 1180, time: '01:45:00',
-    problems: [
-      { solved: true,  solveTime: '09:14' },
-      { solved: false, attempts:  1       },
-      { solved: true,  solveTime: '40:30' },
-      null,
-      { solved: true,  solveTime: '80:22' },
-      { solved: true,  solveTime: '50:11' },
-      null,
-    ],
-    penalties: [null, null, null, null, null],
-    penCount: 0,
-  },
-  {
-    rank: 4, team: 'SegFault', score: 980, time: '02:01:22',
-    problems: [
-      { solved: true,  solveTime: '14:10' },
-      { solved: true,  solveTime: '38:05' },
-      null,
-      null,
-      { solved: false, attempts: 2 },
-      null, null,
-    ],
-    penalties: [
-      { solved: true,  solveTime: '28:40' },
-      { solved: false, attempts:  2       },
-      null, null, null,
-    ],
-    penCount: 2,
-  },
-  {
-    rank: 5, team: 'RecurseThis', score: 870, time: '02:15:44',
-    problems: [
-      { solved: false, attempts: 4 },
-      { solved: true,  solveTime: '25:30' },
-      null,
-      { solved: true,  solveTime: '90:12' },
-      null, null, null,
-    ],
-    penalties: [null, null, null, null, null],
-    penCount: 0,
-  },
-  {
-    rank: 6, team: 'NullPointer', score: 760, time: '02:30:05',
-    problems: [
-      { solved: true, solveTime: '19:22' },
-      null, null,
-      { solved: true, solveTime: '95:10' },
-      null, null, null,
-    ],
-    penalties: [
-      { solved: true, solveTime: '35:00' },
-      null, null, null, null,
-    ],
-    penCount: 1,
-  },
-  {
-    rank: 7, team: 'InfiniLoop', score: 640, time: '02:48:12',
-    problems: [
-      null,
-      { solved: true, solveTime: '44:10' },
-      null, null, null, null, null,
-    ],
-    penalties: [null, null, null, null, null],
-    penCount: 0,
-  },
-  {
-    rank: 8, team: 'StackTrace', score: 520, time: '02:55:00',
-    problems: [
-      { solved: true, solveTime: '31:05' },
-      null, null, null, null, null, null,
-    ],
-    penalties: [null, null, null, null, null],
-    penCount: 0,
-  },
-  {
-    rank: 9, team: 'Dumbo', score: 410, time: '03:10:22',
-    problems: [
-      null,
-      { solved: true, solveTime: '52:10' },
-      null, null, null, null, null,
-    ],
-    penalties: [null, null, null, null, null],
-    penCount: 0,
-  },
-]
+function mapLeaderboardRow(entry, index) {
+  return {
+    rank:           index + 1,
+    team:           entry.team_name,
+    score:          entry.score,
+    totalMistakes:  entry.total_mistakes  ?? 0,
+    penaltyCounter: entry.penalty_counter ?? 0,
+    nodes:          entry.nodes           ?? [],
+  }
+}
 
 /* ══════════════════════════════════════════════════════
    EMBER CANVAS
@@ -234,7 +87,7 @@ function EmberCanvas() {
         const [r, g] = e.rgb, sz = e.size * (1 - p * .25)
         x.save(); x.globalAlpha = al * .55; x.translate(e.x, e.y); x.rotate(e.wobble * .4)
         x.beginPath()
-        x.moveTo(0, -sz*1.1); x.lineTo(sz*.7,-sz*.5); x.lineTo(sz*.9,sz*.2)
+        x.moveTo(0,-sz*1.1); x.lineTo(sz*.7,-sz*.5); x.lineTo(sz*.9,sz*.2)
         x.lineTo(sz*.4,sz*.9); x.lineTo(-sz*.3,sz*.9); x.lineTo(-sz*.9,sz*.2); x.lineTo(-sz*.7,-sz*.5); x.closePath()
         x.fillStyle = `rgba(${r*.25|0},0,0,1)`; x.fill(); x.save(); x.clip()
         const ig = x.createRadialGradient(0,-sz*.1,0,0,-sz*.1,sz*.8)
@@ -286,38 +139,6 @@ const RANK_CFG = {
 }
 
 /* ══════════════════════════════════════════════════════
-   PROBLEM CELL
-══════════════════════════════════════════════════════ */
-function PCell({ p, isPenalty }) {
-  const base = {
-    padding: '8px 4px', textAlign:'center',
-    borderBottom: `1px solid ${C.border}`,
-    verticalAlign: 'middle', minWidth: 52,
-  }
-  if (!p || p === null) return (
-    <td style={base}>
-      <span style={{ color:C.textDim, fontSize:C.fzSm }}>—</span>
-    </td>
-  )
-  if (p.solved) return (
-    <td style={base}>
-      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
-        <span style={{ color: isPenalty ? C.greenPen : C.green, fontSize:C.fzBase, lineHeight:1 }}>✓</span>
-        <span style={{ color: isPenalty ? C.greenPenMut : C.greenMuted, fontSize:C.fzXs, fontFamily:C.fontMono, letterSpacing:'.03em' }}>{p.solveTime}</span>
-      </div>
-    </td>
-  )
-  return (
-    <td style={base}>
-      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
-        <span style={{ color:C.wrong, fontSize:C.fzBase, lineHeight:1 }}>✗</span>
-        <span style={{ color:C.wrongMuted, fontSize:C.fzXs, fontFamily:C.fontMono }}>×{p.attempts}</span>
-      </div>
-    </td>
-  )
-}
-
-/* ══════════════════════════════════════════════════════
    SCORE ROW
 ══════════════════════════════════════════════════════ */
 function ScoreRow({ row, isYou, index, rowRef }) {
@@ -326,9 +147,34 @@ function ScoreRow({ row, isYou, index, rowRef }) {
   const textColor = rs ? rs.color : (isYou ? '#fff' : 'rgba(255,255,255,0.78)')
 
   const tdStyle = {
-    padding: '10px 8px',
+    padding: '14px 12px',
     borderBottom: `1px solid ${C.border}`,
+    borderRight: `1px solid ${C.border}`,
     verticalAlign: 'middle',
+    textAlign: 'center',
+  }
+
+  const getNodeColor = (node) => {
+    const isSolved = node.status === 'solved'
+    const isPenalty = node.node_id >= 9
+    const isFinal = node.node_id === 8
+    const isCheckpoint = node.node_id === 3 || node.node_id === 5
+
+    if (isPenalty) {
+      return isSolved ? '#f87171' : 'rgba(248, 113, 113, 0.35)'
+    } else if (isFinal) {
+      return isSolved ? '#FFD700' : 'rgba(255, 215, 0, 0.35)'
+    } else if (isCheckpoint) {
+      return isSolved ? '#06b6d4' : 'rgba(6, 182, 212, 0.35)'
+    } else {
+      return isSolved ? '#4ade80' : 'rgba(74, 222, 128, 0.35)'
+    }
+  }
+
+  const getNodeBg = (node) => {
+    if (node.node_id === 3 || node.node_id === 5) return 'rgba(6, 182, 212, 0.08)'
+    if (node.node_id === 8)                        return 'rgba(255, 215, 0, 0.08)'
+    return 'transparent'
   }
 
   return (
@@ -350,7 +196,7 @@ function ScoreRow({ row, isYou, index, rowRef }) {
       }}
     >
       {/* RANK */}
-      <td style={{ ...tdStyle, width:60, paddingLeft:18, textAlign:'center' }}>
+      <td style={{ ...tdStyle, width:60, paddingLeft:18 }}>
         {rs
           ? <span style={{ fontFamily:C.fontTitle, fontWeight:900, fontSize:C.fzLg, color:rs.color, textShadow:`0 0 16px ${rs.glow}`, letterSpacing:'.04em' }}>{rs.medal}</span>
           : <span style={{ fontFamily:C.fontMono, fontSize:C.fzBase, color:C.textHeader }}>#{row.rank}</span>
@@ -358,7 +204,7 @@ function ScoreRow({ row, isYou, index, rowRef }) {
       </td>
 
       {/* TEAM NAME */}
-      <td style={{ ...tdStyle, minWidth:160 }}>
+      <td style={{ ...tdStyle, minWidth:180, textAlign: 'left', borderRight: `1px solid ${C.border}` }}>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           <span style={{ fontFamily:C.fontTitle, fontWeight:700, fontSize:C.fzLg, color:textColor, textShadow: rs ? `0 0 12px ${rs.glow}` : 'none', letterSpacing:'.04em' }}>
             {row.team}
@@ -372,38 +218,41 @@ function ScoreRow({ row, isYou, index, rowRef }) {
       </td>
 
       {/* SCORE */}
-      <td style={{ ...tdStyle, width:80, textAlign:'center' }}>
+      <td style={{ ...tdStyle, width:80 }}>
         <span style={{ fontFamily:C.fontMono, fontSize:C.fzLg, fontWeight:700, color:textColor }}>
           {row.score}
         </span>
       </td>
 
-      {/* TIME */}
-      <td style={{ ...tdStyle, width:90, textAlign:'center' }}>
-        <span style={{ fontFamily:C.fontMono, fontSize:C.fzSm, color:C.textMuted, letterSpacing:'.06em' }}>
-          {row.time}
+      {/* NODES 1-8 */}
+      {row.nodes.filter(n => n.node_id >= 1 && n.node_id <= 8).map(node => (
+        <td key={node.node_id} style={{ ...tdStyle, width:50, background: getNodeBg(node) }}>
+          <span style={{ fontFamily:C.fontMono, fontSize:C.fzBase, fontWeight: node.status === 'solved' ? 700 : 400, color: getNodeColor(node) }}>
+            {node.status === 'solved' ? '✓' : '--'}
+          </span>
+        </td>
+      ))}
+
+      {/* PENALTIES */}
+      {row.nodes.filter(n => n.node_id >= 9).map(node => (
+        <td key={node.node_id} style={{ ...tdStyle, width:50, background: 'rgba(248, 113, 113, 0.08)' }}>
+          <span style={{ fontFamily:C.fontMono, fontSize:C.fzBase, fontWeight: node.status === 'solved' ? 700 : 400, color: getNodeColor(node) }}>
+            {node.status === 'solved' ? '✓' : '--'}
+          </span>
+        </td>
+      ))}
+
+      {/* ✗ MISTAKES */}
+      <td style={{ ...tdStyle, width:70 }}>
+        <span style={{ fontFamily:C.fontMono, fontSize:C.fzBase, color: row.totalMistakes > 0 ? C.wrong : C.textDim }}>
+          {row.totalMistakes > 0 ? row.totalMistakes : '—'}
         </span>
       </td>
 
-      {/* Q1–Q7 */}
-      {Array.from({ length: 7 }, (_, i) => (
-        <PCell key={`q${i}`} p={row.problems[i]} isPenalty={false} />
-      ))}
-
-      {/* divider between regular and penalty questions */}
-      <td style={{ padding:0, borderBottom:`1px solid ${C.border}`, width:20 }}>
-        <div style={{ width:1, height:40, background:C.redDiv, margin:'0 auto' }} />
-      </td>
-
-      {/* PQ1–PQ5 */}
-      {Array.from({ length: 5 }, (_, i) => (
-        <PCell key={`pq${i}`} p={row.penalties[i] ?? null} isPenalty={true} />
-      ))}
-
-      {/* PENALTY COUNT */}
-      <td style={{ ...tdStyle, width:56, textAlign:'center' }}>
-        {row.penCount > 0
-          ? <span style={{ fontFamily:C.fontMono, fontSize:C.fzBase, color:C.wrong, fontWeight:700 }}>+{row.penCount}</span>
+      {/* PENALTY COUNTER */}
+      <td style={{ ...tdStyle, width:70, borderRight: 'none' }}>
+        {row.penaltyCounter > 0
+          ? <span style={{ fontFamily:C.fontMono, fontSize:C.fzBase, color:C.wrong, fontWeight:700 }}>+{row.penaltyCounter}</span>
           : <span style={{ fontFamily:C.fontMono, fontSize:C.fzSm, color:C.textDim }}>—</span>
         }
       </td>
@@ -414,17 +263,47 @@ function ScoreRow({ row, isYou, index, rowRef }) {
 /* ══════════════════════════════════════════════════════
    COLUMN HEADER
 ══════════════════════════════════════════════════════ */
-function Th({ children, width, align='center' }) {
+function Th({ children, width, style: extraStyle }) {
   return (
     <th style={{
-      padding: '12px 8px', textAlign: align,
+      padding: '12px 12px',
+      textAlign: 'center',
       fontFamily: C.fontMono,
-      fontSize: C.fzXs, letterSpacing: '.12em',
+      fontSize: C.fzXs,
+      letterSpacing: '.12em',
       color: C.textHeader,
       borderBottom: `1px solid ${C.redBorder}`,
-      fontWeight: 400, whiteSpace: 'nowrap',
+      borderRight: `1px solid ${C.redBorder}`,
+      fontWeight: 400,
+      whiteSpace: 'nowrap',
       width: width ?? 'auto',
+      ...extraStyle,
     }}>{children}</th>
+  )
+}
+
+/* ══════════════════════════════════════════════════════
+   LIVE DOT
+══════════════════════════════════════════════════════ */
+function LiveDot({ connected }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+      <div style={{
+        width: 6, height: 6, borderRadius: '50%',
+        background: connected ? C.green : 'rgba(255,255,255,0.20)',
+        boxShadow: connected ? `0 0 8px ${C.green}` : 'none',
+        animation: connected ? 'pulse 2s ease-in-out infinite' : 'none',
+        transition: 'background .4s, box-shadow .4s',
+      }} />
+      <span style={{
+        fontFamily: C.fontMono, fontSize: C.fzXs,
+        letterSpacing: '.10em',
+        color: connected ? C.greenMuted : C.textDim,
+        transition: 'color .4s',
+      }}>
+        {connected ? 'LIVE' : 'CONNECTING...'}
+      </span>
+    </div>
   )
 }
 
@@ -432,74 +311,68 @@ function Th({ children, width, align='center' }) {
    MAIN SCOREBOARD
 ══════════════════════════════════════════════════════ */
 export default function Scoreboard() {
-  const teamName = sessionStorage.getItem('teamName') || ''
+  const [teamName, setTeamName] = useState('')
 
-  // inject current team into dummy data so YOU row always shows
-  // ← backend replaces this entirely via fetchScores()
-  const getDummyWithTeam = (name) => {
-    if (!name) return DUMMY_DATA
-    const already = DUMMY_DATA.some(r => r.team.toLowerCase() === name.toLowerCase())
-    if (already) return DUMMY_DATA
-    return [...DUMMY_DATA, {
-      rank: DUMMY_DATA.length + 1,
-      team: name,
-      score: 0,
-      time: '--:--:--',
-      problems: Array(7).fill(null),
-      penalties: Array(5).fill(null),
-      penCount: 0,
-    }]
-  }
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setTeamName(sessionStorage.getItem('teamName') || '')
+    }
+  }, [])
 
-  const [data, setData]         = useState(() => getDummyWithTeam(teamName))
-  const [lastRefresh, setLast]  = useState(new Date())
-  const [spinning, setSpinning] = useState(false)
-  const [loading, setLoading]   = useState(false)
+  const [data,        setData]        = useState([])
+  const [loading,     setLoading]     = useState(true)
+  const [error,       setError]       = useState('')
+  const [rtConnected, setRtConnected] = useState(false)
 
   const yourRowRef = useRef(null)
 
-  // scroll to your row after data loads
+
   useEffect(() => {
     if (yourRowRef.current) {
       setTimeout(() => {
-        yourRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        yourRowRef.current.scrollIntoView({ behavior:'smooth', block:'center' })
       }, 600)
     }
   }, [data])
 
-  /* ── BACKEND HOOK ───────────────────────────────────
-     Replace the body of this function with your real fetch.
-     Expected response shape: array matching DUMMY_DATA structure above.
-  ─────────────────────────────────────────────────── */
+  // ─── fetch from backend ───
   const fetchScores = useCallback(async () => {
-    setLoading(true)
+    setError('')
     try {
-      // const res  = await fetch('/api/scoreboard')
-      // const json = await res.json()
-      // setData(json)
-      await new Promise(r => setTimeout(r, 300)) // simulate latency
-      setData(DUMMY_DATA)
-      setLast(new Date())
+      const res = await apiFetch('/api/leaderboard')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const json = await res.json()
+      console.log('API Response:', json)
+      const mapped = (json || []).map((entry, i) => mapLeaderboardRow(entry, i))
+      setData(mapped)
     } catch (err) {
       console.error('Scoreboard fetch failed:', err)
+      setError('Failed to load scoreboard.')
     } finally {
       setLoading(false)
     }
   }, [])
 
-  // initial load + 30s auto-poll
+  // ─── initial load + FallBack ───
   useEffect(() => {
     fetchScores()
-    const id = setInterval(fetchScores, 30000)
+    const id = setInterval(fetchScores, 30_000)
     return () => clearInterval(id)
   }, [fetchScores])
 
-  const handleRefresh = () => {
-    if (spinning) return
-    setSpinning(true)
-    fetchScores()
-    setTimeout(() => setSpinning(false), 700)
-  }
+  // ─── Supabase realtime ───
+  useEffect(() => {
+    const channel = supabase
+      .channel('scoreboard-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'participant_game_state' },   fetchScores)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'participant_node_progress' }, fetchScores)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leaderboard' },              fetchScores)
+      .subscribe((status) => {
+        setRtConnected(status === 'SUBSCRIBED')
+      })
+
+    return () => { supabase.removeChannel(channel) }
+  }, [fetchScores])
 
   return (
     <div style={{ minHeight:'100vh', background:C.bg, position:'relative', overflow:'hidden', userSelect:'none', WebkitUserSelect:'none' }}>
@@ -507,98 +380,106 @@ export default function Scoreboard() {
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Share+Tech+Mono&display=swap');
         *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; user-select:none; -webkit-user-select:none; }
         html, body, * { cursor: none !important; }
-
-        @keyframes rowIn    { from { opacity:0; transform:translateX(-12px) } to { opacity:1; transform:translateX(0) } }
-        @keyframes blink    { 0%,49%{opacity:1} 50%,100%{opacity:0} }
-        @keyframes spin     { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-        @keyframes fadeIn   { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes pulse    { 0%,100%{opacity:.6} 50%{opacity:1} }
-
+        @keyframes rowIn  { from{opacity:0;transform:translateX(-12px)} to{opacity:1;transform:translateX(0)} }
+        @keyframes blink  { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes pulse  { 0%,100%{opacity:.6} 50%{opacity:1} }
+        .back-btn:hover { color:#fff!important; }
         ::-webkit-scrollbar { width:4px; height:4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(227,18,18,0.35); border-radius:2px; }
-
-        .refresh-btn:hover { color: #fff !important; border-color: rgba(227,18,18,0.70) !important; background: rgba(227,18,18,0.12) !important; }
-        .back-btn:hover    { color: #fff !important; }
+        ::-webkit-scrollbar-track { background:transparent; }
+        ::-webkit-scrollbar-thumb { background:rgba(227,18,18,0.35); border-radius:2px; }
       `}</style>
 
-      {/* ── BG LAYERS ── */}
+      {/* BG */}
       <div style={{ position:'fixed', inset:0, zIndex:0, background:`radial-gradient(ellipse 90% 80% at 50% 100%, rgba(227,18,18,0.07) 0%, transparent 65%)` }} />
       <EmberCanvas />
       <LightningLayer />
       <SplashCursor />
 
-      {/* ── NAVBAR ── */}
+      {/* NAVBAR */}
       <nav style={{ position:'fixed', top:0, left:0, right:0, zIndex:50, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'18px 40px', borderBottom:`1px solid rgba(255,255,255,0.05)`, backdropFilter:'blur(10px)', background:'rgba(5,4,5,0.60)' }}>
+
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
           <div style={{ width:7, height:7, background:C.red, borderRadius:'50%', boxShadow:`0 0 10px ${C.red}`, animation:'blink 2s step-start infinite' }} />
-          <span style={{ fontFamily:C.fontTitle, fontSize:C.fzSm, fontWeight:700, color:C.red, letterSpacing:'.20em', textShadow:`0 0 10px ${C.glowRed}` }}>RECURSION HELL</span>
+          <span style={{ fontFamily:C.fontTitle, fontSize:C.fzSm, fontWeight:700, color:C.red, letterSpacing:'.20em', textShadow:`0 0 10px ${C.glowRed}` }}>
+            RECURSION HELL
+          </span>
         </div>
 
         <span style={{ fontFamily:C.fontTitle, fontSize:C.fzBase, fontWeight:700, letterSpacing:'.28em', color:C.textPrimary }}>
           SCOREBOARD
         </span>
 
-        <div style={{ display:'flex', alignItems:'center', gap:16 }}>
-          {/* last updated */}
-          <span style={{ fontFamily:C.fontMono, fontSize:C.fzXs, letterSpacing:'.10em', color:C.textDim, animation:'pulse 3s ease-in-out infinite' }}>
-            {loading ? 'FETCHING...' : `UPDATED ${lastRefresh.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' })}`}
-          </span>
-
-          {/* refresh btn */}
-          <button className="refresh-btn" onClick={handleRefresh} style={{ background:'rgba(255,255,255,0.04)', border:`1px solid rgba(255,255,255,0.12)`, borderRadius:8, color:'rgba(255,255,255,0.50)', fontFamily:C.fontMono, fontSize:C.fzXs, letterSpacing:'.10em', padding:'6px 14px', cursor:'none', display:'flex', alignItems:'center', gap:6, transition:'all .18s' }}>
-            <span style={{ display:'inline-block', animation: spinning ? 'spin .7s linear' : 'none', fontSize:'.80rem' }}>↻</span>
-            REFRESH
-          </button>
-
-          {/* back to game */}
-          <button className="back-btn" onClick={() => window.location.assign('/landing')} style={{ background:'none', border:'none', cursor:'none', fontFamily:C.fontMono, fontSize:C.fzXs, letterSpacing:'.10em', color:C.textHeader, transition:'color .18s' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:20 }}>
+          <LiveDot connected={rtConnected} />
+          <button className="back-btn" onClick={() => window.location.assign('/gamepage')} style={{ background:'none', border:'none', cursor:'none', fontFamily:C.fontMono, fontSize:C.fzXs, letterSpacing:'.10em', color:C.textHeader, transition:'color .18s' }}>
             ← BACK
           </button>
         </div>
       </nav>
 
-      {/* ── TABLE WRAPPER ── */}
+      {/* TABLE */}
       <div style={{ position:'relative', zIndex:10, paddingTop:80, paddingBottom:48, overflowX:'auto', animation:'fadeIn .5s ease-out' }}>
-        <table style={{ width:'100%', minWidth:960, borderCollapse:'collapse', tableLayout:'fixed' }}>
-          <thead>
-            <tr>
-              <Th width={60}>RNK</Th>
-              <Th width={160} align="left">TEAM</Th>
-              <Th width={80}>SCORE</Th>
-              <Th width={90}>TIME</Th>
-              {Array.from({ length:7 }, (_,i) => <Th key={i} width={52}>Q{i+1}</Th>)}
-              <Th width={20}> </Th>
-              {Array.from({ length:5 }, (_,i) => (
-                <Th key={i} width={52} >
-                  <span style={{ color:'rgba(227,18,18,0.55)' }}>P{i+1}</span>
-                </Th>
-              ))}
-              <Th width={56}>PEN</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((row, i) => (
-              <ScoreRow
-                key={row.team}
-                row={row}
-                isYou={row.team.toLowerCase() === teamName.toLowerCase()}
-                index={i}
-                rowRef={row.team.toLowerCase() === teamName.toLowerCase() ? yourRowRef : null}
-              />
-            ))}
-          </tbody>
-        </table>
 
-        {/* empty state */}
-        {data.length === 0 && (
+        {error && (
+          <div style={{ margin:'20px 40px', padding:'12px 20px', background:'rgba(90,0,0,0.25)', border:'1px solid rgba(160,0,0,0.35)', borderRadius:8, fontFamily:C.fontMono, fontSize:C.fzSm, color:'#EDE0D4', display:'flex', gap:10, alignItems:'center' }}>
+            <span style={{ color:'#DD2200' }}>⚠</span>{error}
+            <button onClick={fetchScores} style={{ marginLeft:'auto', background:'none', border:'1px solid rgba(227,18,18,0.4)', borderRadius:6, color:C.red, fontFamily:C.fontMono, fontSize:C.fzXs, padding:'4px 12px', cursor:'none', letterSpacing:'.1em' }}>RETRY</button>
+          </div>
+        )}
+
+        {loading && data.length === 0 && (
+          <div style={{ padding:'60px 0', textAlign:'center', fontFamily:C.fontMono, fontSize:C.fzSm, letterSpacing:'.2em', color:C.textDim }}>
+            LOADING SCOREBOARD...
+          </div>
+        )}
+
+        {data.length > 0 && (
+          <div style={{ marginLeft: 40, marginRight: 40 }}>
+            <table style={{ width:'100%', borderCollapse:'collapse' }}>
+              <thead>
+                <tr>
+                  <Th width={60}>RNK</Th>
+                  <Th width={180}>TEAM</Th>
+                  <Th width={80}>SCORE</Th>
+                  <Th width={60}>START</Th>
+                  <Th width={50}>N1</Th>
+                  <Th width={50}>N2</Th>
+                  <Th width={50} style={{ background: 'rgba(6, 182, 212, 0.08)' }}>N3◆</Th>
+                  <Th width={50}>N4</Th>
+                  <Th width={50} style={{ background: 'rgba(6, 182, 212, 0.08)' }}>N5◆</Th>
+                  <Th width={50}>N6</Th>
+                  <Th width={50}>N7</Th>
+                  <Th width={50} style={{ background: 'rgba(255, 215, 0, 0.08)' }}>Final</Th>
+                  <Th width={50}>P1</Th>
+                  <Th width={50}>P2</Th>
+                  <Th width={50}>P3</Th>
+                  <Th width={70}>✗</Th>
+                  <Th width={70}>PEN</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((row, i) => (
+                  <ScoreRow
+                    key={row.team}
+                    row={row}
+                    isYou={row.team.toLowerCase() === teamName.toLowerCase()}
+                    index={i}
+                    rowRef={row.team.toLowerCase() === teamName.toLowerCase() ? yourRowRef : null}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {!loading && !error && data.length === 0 && (
           <div style={{ textAlign:'center', padding:'80px 0', fontFamily:C.fontMono, fontSize:C.fzSm, letterSpacing:'.18em', color:C.textDim }}>
-            NO DATA YET — WAITING FOR TEAMS
+            NO TEAMS REGISTERED YET
           </div>
         )}
       </div>
 
-      {/* bottom ember source — red glow at base */}
       <div style={{ position:'fixed', bottom:0, left:0, right:0, height:120, zIndex:0, pointerEvents:'none', background:'linear-gradient(0deg, rgba(180,20,0,0.18) 0%, transparent 100%)' }} />
     </div>
   )

@@ -1,28 +1,17 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import SplashCursor from '../components/SplashCursor'
 import Lightning from '../components/Lightning'
+import { apiFetch } from '../lib/api'
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
-
-/* ═══════════════════════════════════════════
-   THEME — single source of truth
-═══════════════════════════════════════════ */
 const T = {
   bg:          '#18171a',
   cardBg:      'rgba(14,10,12,0.55)',
   cardBorder:  'rgba(255,255,255,0.11)',
-
   emberPalette: [[255,90,0],[235,55,0],[210,35,0],[255,130,20],[185,30,0],[140,10,0]],
   sporeRgb:    [255,100,0],
   bulbColors:  ['#FF4400','#FF7700','#FFBB00','#FF2200','#FF5500','#FFDD44','#FF3300','#FF9900','#EE4400'],
-
   titleTop:    '#C0130A',
   titleBot:    '#5A0000',
-
-  btnFrom:     '#CC3300',
-  btnTo:       '#7A0000',
-  btnText:     '#FFE8D0',
-
   label:       '#DDD0C8',
   muted:       'rgba(200,170,150,0.45)',
   accent:      'rgba(220,100,40,0.70)',
@@ -298,41 +287,12 @@ function Background() {
 
   return (
     <div style={{position:'fixed',inset:0,zIndex:0,background:T.bg}}>
-      {/* ember phase — warm amber bloom from centre */}
-      <div style={{
-        position:'absolute',inset:0,
-        background:'radial-gradient(ellipse at 50% 48%, rgba(220,80,0,0.28) 0%, rgba(160,35,0,0.14) 35%, transparent 70%)',
-        opacity:Math.max(0,1-phase*1.8), pointerEvents:'none',
-      }}/>
-      <div style={{
-        position:'absolute',bottom:0,left:0,right:0,height:'55%',
-        background:'linear-gradient(0deg,rgba(180,50,0,0.22) 0%,rgba(120,20,0,0.10) 50%,transparent 100%)',
-        opacity:Math.max(0,1-phase*1.6), pointerEvents:'none',
-      }}/>
-
-      {/* settled — ember glow pockets, left + right asymmetric */}
-      <div style={{
-        position:'absolute',inset:0,
-        background:'radial-gradient(ellipse at 18% 72%, rgba(200,55,0,0.13) 0%, transparent 40%)',
-        opacity:Math.min(1,phase*1.4), pointerEvents:'none',
-      }}/>
-      <div style={{
-        position:'absolute',inset:0,
-        background:'radial-gradient(ellipse at 82% 32%, rgba(160,30,0,0.10) 0%, transparent 38%)',
-        opacity:Math.min(1,phase*1.3), pointerEvents:'none',
-      }}/>
-      {/* deep red vignette corners */}
-      <div style={{
-        position:'absolute',inset:0,
-        background:'radial-gradient(ellipse at 0% 0%, rgba(100,5,0,0.18) 0%, transparent 45%), radial-gradient(ellipse at 100% 100%, rgba(90,5,0,0.16) 0%, transparent 40%)',
-        opacity:Math.min(1,phase*1.6), pointerEvents:'none',
-      }}/>
-      {/* very subtle top red wash */}
-      <div style={{
-        position:'absolute',top:0,left:0,right:0,height:'40%',
-        background:'linear-gradient(180deg,rgba(80,6,0,0.14) 0%,transparent 100%)',
-        opacity:Math.min(1,phase*1.5), pointerEvents:'none',
-      }}/>
+      <div style={{position:'absolute',inset:0,background:'radial-gradient(ellipse at 50% 48%, rgba(220,80,0,0.28) 0%, rgba(160,35,0,0.14) 35%, transparent 70%)',opacity:Math.max(0,1-phase*1.8),pointerEvents:'none'}}/>
+      <div style={{position:'absolute',bottom:0,left:0,right:0,height:'55%',background:'linear-gradient(0deg,rgba(180,50,0,0.22) 0%,rgba(120,20,0,0.10) 50%,transparent 100%)',opacity:Math.max(0,1-phase*1.6),pointerEvents:'none'}}/>
+      <div style={{position:'absolute',inset:0,background:'radial-gradient(ellipse at 18% 72%, rgba(200,55,0,0.13) 0%, transparent 40%)',opacity:Math.min(1,phase*1.4),pointerEvents:'none'}}/>
+      <div style={{position:'absolute',inset:0,background:'radial-gradient(ellipse at 82% 32%, rgba(160,30,0,0.10) 0%, transparent 38%)',opacity:Math.min(1,phase*1.3),pointerEvents:'none'}}/>
+      <div style={{position:'absolute',inset:0,background:'radial-gradient(ellipse at 0% 0%, rgba(100,5,0,0.18) 0%, transparent 45%), radial-gradient(ellipse at 100% 100%, rgba(90,5,0,0.16) 0%, transparent 40%)',opacity:Math.min(1,phase*1.6),pointerEvents:'none'}}/>
+      <div style={{position:'absolute',top:0,left:0,right:0,height:'40%',background:'linear-gradient(180deg,rgba(80,6,0,0.14) 0%,transparent 100%)',opacity:Math.min(1,phase*1.5),pointerEvents:'none'}}/>
       {bolt&&(
         <div style={{position:'absolute',inset:0,mixBlendMode:'screen',pointerEvents:'none',animation:'bIn .12s ease-out'}}>
           <style>{`@keyframes bIn{from{opacity:0}to{opacity:1}}`}</style>
@@ -344,112 +304,165 @@ function Background() {
 }
 
 /* ─────────────────────────────────────────
+   ERROR MESSAGES
+───────────────────────────────────────── */
+function getErrorMessage(status, serverMessage) {
+  if (status === 403) {
+    if (serverMessage?.toLowerCase().includes('ended'))    return 'The competition has ended.'
+    if (serverMessage?.toLowerCase().includes('disabled')) return 'Your account has been disabled.'
+    return serverMessage || 'Access denied.'
+  }
+  if (status === 401) return 'Invalid team name or password.'
+  if (status === 400) return 'Team name must be 3–50 characters and password 6–128 characters.'
+  if (status === 429) return 'Too many attempts. Please wait a moment and try again.'
+  if (status >= 500)  return 'Server error. Please try again shortly.'
+  if (status === 0)   return 'Cannot reach the server. Check your connection.'
+  return serverMessage || 'Something went wrong. Please try again.'
+}
+
+/* ─────────────────────────────────────────
    LOGIN
 ───────────────────────────────────────── */
 export default function Login() {
-  const [team,   setTeam]   = useState('')
-  const [pass,   setPass]   = useState('')
-  const [error,  setError]  = useState('')
-  const [loading,setLoading]= useState(false)
-  const [shake,  setShake]  = useState(false)
-  const [typing, setTyping] = useState(false)
+  const [team,    setTeam]    = useState('')
+  const [pass,    setPass]    = useState('')
+  const [error,   setError]   = useState('')
+  const [loading, setLoading] = useState(false)
+  const [shake,   setShake]   = useState(false)
+  const [typing,  setTyping]  = useState(false)
   const cardRef   = useRef(null)
   const typingRef = useRef(null)
 
-  const canSubmit = useMemo(()=>team.trim()&&pass.trim()&&!loading,[team,pass,loading])
+  const canSubmit = useMemo(() => team.trim() && pass.trim() && !loading, [team, pass, loading])
 
-  const onType = useCallback(()=>{
+  const onType = useCallback(() => {
     setTyping(true); clearTimeout(typingRef.current)
-    typingRef.current=setTimeout(()=>setTyping(false),1200)
-  },[])
+    typingRef.current = setTimeout(() => setTyping(false), 1200)
+  }, [])
 
-  async function handleSubmit(e){
-    e.preventDefault(); if(loading) return
-    const tn=team.trim(),pw=pass.trim()
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (loading) return
+    const tn = team.trim(), pw = pass.trim()
     setError('')
-    if(!tn||!pw){ setShake(true); setError('Team name and password are required.'); setTimeout(()=>setShake(false),420); return }
+
+    if (!tn || !pw) {
+      setShake(true)
+      setError('Team name and password are required.')
+      setTimeout(() => setShake(false), 420)
+      return
+    }
+
     setLoading(true)
-    try{
-      await sleep(800)
-      sessionStorage.setItem('teamName',tn)
-      // ── BACKEND HOOK ──
-      // const res=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({teamName:tn,password:pw})})
-      // if(!res.ok){const d=await res.json().catch(()=>({}));setError(d.error||'Invalid credentials.');setLoading(false);return}
-      // sessionStorage.setItem('token',(await res.json()).token)
-      window.location.assign('/landing')
-    }catch{ setError('Authentication failed. Try again.'); setLoading(false) }
+    try {
+      const res = await apiFetch('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ username: tn, password: pw }),
+      })
+
+      if (!res) {
+        setError(getErrorMessage(0, null))
+        setShake(true); setTimeout(() => setShake(false), 420)
+        setLoading(false)
+        return
+      }
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        setError(getErrorMessage(res.status, data?.error))
+        setShake(true); setTimeout(() => setShake(false), 420)
+        setLoading(false)
+        return
+      }
+
+      sessionStorage.setItem('token', data.token)
+      sessionStorage.setItem('teamName', tn)
+      window.location.assign('/gamepage')
+
+    } catch {
+      setError(getErrorMessage(0, null))
+      setShake(true); setTimeout(() => setShake(false), 420)
+      setLoading(false)
+    }
   }
 
   return (
-    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',position:'relative'}}>
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', position:'relative', overflow:'hidden' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Share+Tech+Mono&family=Barlow:wght@400;500;600&display=swap');
-        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-        html,body,*{cursor:none!important;user-select:none;-webkit-user-select:none}
-        input{user-select:text!important;-webkit-user-select:text!important}
+        *,*::before,*::after { box-sizing:border-box; margin:0; padding:0 }
+        html,body,* { cursor:none!important; user-select:none; -webkit-user-select:none }
+        html,body { overflow:hidden; height:100%; }
+        input { user-select:text!important; -webkit-user-select:text!important }
+        * { scrollbar-width:none; -ms-overflow-style:none; }
+        *::-webkit-scrollbar { display:none; }
 
-        @keyframes shake  {0%,100%{transform:translateX(0)}22%,66%{transform:translateX(-8px)}44%,88%{transform:translateX(8px)}}
-        @keyframes floatY {0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
-        @keyframes spin   {to{transform:rotate(360deg)}}
-        @keyframes blink  {0%,49%{opacity:1}50%,100%{opacity:0}}
-        @keyframes sweep  {0%{left:-70%}100%{left:130%}}
-        @keyframes cardGlow{
-          0%,100%{box-shadow:inset 0 1px 0 rgba(255,255,255,0.12),inset 0 -1px 0 rgba(0,0,0,0.25),0 2px 0 rgba(255,255,255,0.05),0 28px 70px rgba(0,0,0,0.70),0 0 50px rgba(150,35,0,0.10)}
-          50%    {box-shadow:inset 0 1px 0 rgba(255,255,255,0.16),inset 0 -1px 0 rgba(0,0,0,0.25),0 2px 0 rgba(255,255,255,0.06),0 28px 70px rgba(0,0,0,0.70),0 0 65px rgba(190,50,0,0.16)}
+        @keyframes shake        { 0%,100%{transform:translateX(0)} 22%,66%{transform:translateX(-8px)} 44%,88%{transform:translateX(8px)} }
+        @keyframes floatY       { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+        @keyframes spin         { to{transform:rotate(360deg)} }
+        @keyframes blink        { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+        @keyframes sweep        { 0%{left:-70%} 100%{left:130%} }
+        @keyframes errorIn      { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes cardGlow {
+          0%,100% { box-shadow:inset 0 1px 0 rgba(255,255,255,0.12),inset 0 -1px 0 rgba(0,0,0,0.25),0 28px 70px rgba(0,0,0,0.70),0 0 50px rgba(150,35,0,0.10) }
+          50%     { box-shadow:inset 0 1px 0 rgba(255,255,255,0.16),inset 0 -1px 0 rgba(0,0,0,0.25),0 28px 70px rgba(0,0,0,0.70),0 0 65px rgba(190,50,0,0.16) }
         }
-        @keyframes titleFlicker{0%,88%,100%{opacity:1}89%{opacity:.55}90%{opacity:1}94%{opacity:.7}95%{opacity:1}}
-        @keyframes btnPulse{
-          0%,100%{box-shadow:inset 0 1px 0 rgba(255,180,100,0.18),0 6px 20px rgba(180,40,0,0.38),0 2px 6px rgba(0,0,0,0.55)}
-          50%    {box-shadow:inset 0 1px 0 rgba(255,180,100,0.22),0 6px 30px rgba(210,60,0,0.55),0 2px 6px rgba(0,0,0,0.55)}
+        @keyframes titleFlicker { 0%,88%,100%{opacity:1} 89%{opacity:.55} 90%{opacity:1} 94%{opacity:.7} 95%{opacity:1} }
+        @keyframes btnPulse {
+          0%,100% { box-shadow:inset 0 1px 0 rgba(255,180,100,0.18),0 6px 20px rgba(180,40,0,0.38),0 2px 6px rgba(0,0,0,0.55) }
+          50%     { box-shadow:inset 0 1px 0 rgba(255,180,100,0.22),0 6px 30px rgba(210,60,0,0.55),0 2px 6px rgba(0,0,0,0.55) }
         }
 
-        .card-anim {animation:floatY 10s ease-in-out infinite,cardGlow 5s ease-in-out infinite}
-        .card-shake{animation:shake 420ms ease-in-out!important}
-        .title-flicker{animation:titleFlicker 9s linear infinite}
+        .card-anim   { animation:floatY 10s ease-in-out infinite, cardGlow 5s ease-in-out infinite }
+        .card-shake  { animation:shake 420ms ease-in-out!important }
+        .title-flicker { animation:titleFlicker 9s linear infinite }
+        .error-box   { animation:errorIn .2s ease-out }
 
-        .hell-input{
-          width:100%;padding:12px 15px;
+        .hell-input {
+          width:100%; padding:12px 15px;
           background:rgba(255,255,255,0.06);
           border:1px solid rgba(255,255,255,0.09);
-          border-radius:10px;color:#EDE0D4;
-          font-family:'Share Tech Mono',monospace;font-size:.875rem;
-          outline:none;caret-color:#FF6600;
+          border-radius:10px; color:#EDE0D4;
+          font-family:'Share Tech Mono',monospace; font-size:.875rem;
+          outline:none; caret-color:#FF6600;
           box-shadow:inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.15);
-          transition:border-color .2s,background .2s,box-shadow .2s;
+          transition:border-color .2s, background .2s, box-shadow .2s;
         }
-        .hell-input::placeholder{color:rgba(210,175,150,0.32);font-style:italic}
-        .hell-input:focus{
+        .hell-input::placeholder { color:rgba(210,175,150,0.32); font-style:italic }
+        .hell-input:focus {
           background:rgba(255,255,255,0.09);
           border-color:rgba(200,70,0,0.50);
-          box-shadow:inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.15), 0 0 0 3px rgba(180,50,0,0.12), 0 0 18px rgba(160,40,0,0.08);
+          box-shadow:inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.15),
+                     0 0 0 3px rgba(180,50,0,0.12), 0 0 18px rgba(160,40,0,0.08);
         }
-        .btn-on{
-          width:100%;padding:14px 0;border:none;border-radius:10px;
-          font-family:'Cinzel',serif;font-size:.80rem;font-weight:700;
-          letter-spacing:.26em;text-transform:uppercase;cursor:none;
+        .btn-on {
+          width:100%; padding:14px 0; border:none; border-radius:10px;
+          font-family:'Cinzel',serif; font-size:.80rem; font-weight:700;
+          letter-spacing:.26em; text-transform:uppercase; cursor:none;
           background:linear-gradient(160deg,#D94400 0%,#A01800 45%,#6A0000 100%);
-          color:#FFE8D0;position:relative;overflow:hidden;
+          color:#FFE8D0; position:relative; overflow:hidden;
           box-shadow:inset 0 1px 0 rgba(255,180,100,0.18),inset 0 -1px 0 rgba(0,0,0,0.30);
           animation:btnPulse 3.5s ease-in-out infinite;
-          transition:filter .18s,transform .12s;
+          transition:filter .18s, transform .12s;
         }
-        .btn-on::before{
-          content:'';position:absolute;inset:0;border-radius:10px;
+        .btn-on::before {
+          content:''; position:absolute; inset:0; border-radius:10px;
           background:linear-gradient(180deg,rgba(255,150,80,0.08) 0%,transparent 50%);
           pointer-events:none;
         }
-        .btn-on::after{
-          content:'';position:absolute;top:0;left:-70%;width:45%;height:100%;
+        .btn-on::after {
+          content:''; position:absolute; top:0; left:-70%; width:45%; height:100%;
           background:linear-gradient(90deg,transparent,rgba(255,200,150,0.12),transparent);
-          transform:skewX(-16deg);animation:sweep 4.5s ease-in-out infinite;
+          transform:skewX(-16deg); animation:sweep 4.5s ease-in-out infinite;
         }
-        .btn-on:hover{filter:brightness(1.12);transform:translateY(-2px)}
-        .btn-on:active{transform:translateY(0);filter:brightness(0.96)}
-        .btn-off{
-          width:100%;padding:14px 0;border-radius:10px;border:none;
-          font-family:'Cinzel',serif;font-size:.80rem;font-weight:700;
-          letter-spacing:.26em;text-transform:uppercase;cursor:not-allowed;
-          background:rgba(255,255,255,0.025);color:rgba(200,160,140,0.18);
+        .btn-on:hover  { filter:brightness(1.12); transform:translateY(-2px) }
+        .btn-on:active { transform:translateY(0); filter:brightness(0.96) }
+        .btn-off {
+          width:100%; padding:14px 0; border-radius:10px; border:none;
+          font-family:'Cinzel',serif; font-size:.80rem; font-weight:700;
+          letter-spacing:.26em; text-transform:uppercase; cursor:not-allowed;
+          background:rgba(255,255,255,0.025); color:rgba(200,160,140,0.18);
           border:1px solid rgba(255,255,255,0.06);
         }
       `}</style>
@@ -462,80 +475,79 @@ export default function Login() {
       {/* ── CARD ── */}
       <div
         ref={cardRef}
-        className={`card-anim${shake?' card-shake':''}`}
+        className={`card-anim${shake ? ' card-shake' : ''}`}
         style={{
-          position:'relative',zIndex:10,
-          width:'min(92vw,400px)',
+          position:'relative', zIndex:10,
+          width:'min(92vw, 400px)',
           background:T.cardBg,
           borderRadius:16,
           border:`1px solid ${T.cardBorder}`,
           backdropFilter:'blur(40px) saturate(2.2)',
           WebkitBackdropFilter:'blur(40px) saturate(2.2)',
-          padding:'clamp(1.6rem,4vw,2.2rem) clamp(1.4rem,4vw,2rem)',
+          padding:'clamp(1.4rem,4vw,2rem) clamp(1.4rem,4vw,2rem)',
           overflow:'hidden',
         }}
       >
-        {/* top edge shimmer */}
-        <div style={{
-          position:'absolute',top:0,left:'8%',right:'8%',height:1,
-          background:'linear-gradient(90deg,transparent,rgba(255,255,255,0.10),rgba(255,255,255,0.20),rgba(255,255,255,0.10),transparent)',
-        }}/>
+        <div style={{position:'absolute',top:0,left:'8%',right:'8%',height:1,background:'linear-gradient(90deg,transparent,rgba(255,255,255,0.10),rgba(255,255,255,0.20),rgba(255,255,255,0.10),transparent)'}}/>
 
         <div style={{position:'relative',zIndex:2}}>
           <BulbStrip typing={typing}/>
 
-          {/* title */}
-          <div style={{textAlign:'center',margin:'14px 0 22px'}}>
-            <h1 className="title-flicker" style={{
-              fontFamily:'"Cinzel",serif',fontWeight:900,
-              lineHeight:.95,letterSpacing:'.05em',
-              display:'flex',flexDirection:'column',alignItems:'center',gap:'.02em',
-            }}>
-              <span style={{
-                fontSize:'clamp(2.1rem,7.8vw,3.0rem)',
-                background:`linear-gradient(175deg,${T.titleTop} 0%,#8B0000 60%,${T.titleBot} 100%)`,
-                WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',
-                filter:'drop-shadow(0 1px 4px rgba(130,0,0,0.40))',
-              }}>RECURSION</span>
-              <span style={{
-                fontSize:'clamp(2.4rem,8.8vw,3.4rem)',
-                background:'linear-gradient(175deg,#A80000 0%,#5A0000 55%,#2A0000 100%)',
-                WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',
-                filter:'drop-shadow(0 1px 4px rgba(100,0,0,0.35))',
-              }}>HELL</span>
+          {/* ── TITLE ── */}
+          <div style={{textAlign:'center',margin:'12px 0 20px'}}>
+            <h1
+              className="title-flicker"
+              style={{
+                fontFamily:'"Cinzel",serif',
+                fontWeight:900,
+                fontSize:'clamp(1.3rem,5.5vw,1.65rem)',
+                letterSpacing:'.06em',
+                whiteSpace:'nowrap',
+                background:`linear-gradient(175deg,${T.titleTop} 0%,#8B0000 55%,${T.titleBot} 100%)`,
+                WebkitBackgroundClip:'text',
+                WebkitTextFillColor:'transparent',
+                backgroundClip:'text',
+                filter:'drop-shadow(0 1px 6px rgba(130,0,0,0.50))',
+              }}
+            >
+              RECURSION HELL
             </h1>
-            <p style={{
-              fontFamily:'"Share Tech Mono",monospace',fontSize:'.50rem',
-              letterSpacing:'.26em',color:T.accent,marginTop:10,textTransform:'uppercase',
-            }}>The Upside Down &nbsp;∞</p>
+            <p style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'.48rem',letterSpacing:'.26em',color:T.accent,marginTop:8,textTransform:'uppercase'}}>
+              The Upside Down &nbsp;∞
+            </p>
           </div>
 
           {/* divider */}
-          <div style={{
-            height:1,marginBottom:20,
-            background:'linear-gradient(90deg,transparent,rgba(170,50,0,0.32),rgba(210,75,0,0.46),rgba(170,50,0,0.32),transparent)',
-          }}/>
+          <div style={{height:1,marginBottom:18,background:'linear-gradient(90deg,transparent,rgba(170,50,0,0.32),rgba(210,75,0,0.46),rgba(170,50,0,0.32),transparent)'}}/>
 
           {/* error */}
-          {error&&(
-            <div style={{
+          {error && (
+            <div className="error-box" style={{
               display:'flex',gap:8,alignItems:'flex-start',
               background:'rgba(90,0,0,0.22)',border:'1px solid rgba(160,0,0,0.28)',
               borderRadius:8,padding:'9px 13px',marginBottom:14,
-              fontFamily:'"Share Tech Mono",monospace',fontSize:'.80rem',color:'#EDE0D4',lineHeight:1.5,
+              fontFamily:'"Share Tech Mono",monospace',fontSize:'.78rem',color:'#EDE0D4',lineHeight:1.5,
             }}>
-              <span style={{color:'#DD2200',flexShrink:0,marginTop:1}}>⚠</span>{error}
+              <span style={{color:'#DD2200',flexShrink:0,marginTop:1}}>⚠</span>
+              {error}
             </div>
           )}
 
           {/* form */}
-          <div style={{display:'flex',flexDirection:'column',gap:16}}>
+          <div style={{display:'flex',flexDirection:'column',gap:14}}>
             <div>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:6}}>
                 <label style={{fontFamily:'"Barlow",sans-serif',fontSize:'.80rem',fontWeight:600,color:T.label}}>Team Name</label>
                 <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'.48rem',letterSpacing:'.08em',color:T.muted}}>IDENTIFIER</span>
               </div>
-              <input className="hell-input" value={team} onChange={e=>{setTeam(e.target.value);onType()}} autoComplete="username" spellCheck={false} placeholder="e.g. StackSmashers"/>
+              <input
+                className="hell-input"
+                value={team}
+                onChange={e=>{ setTeam(e.target.value); onType(); setError('') }}
+                autoComplete="username"
+                spellCheck={false}
+                placeholder="e.g. StackSmashers"
+              />
             </div>
 
             <div>
@@ -543,25 +555,34 @@ export default function Login() {
                 <label style={{fontFamily:'"Barlow",sans-serif',fontSize:'.80rem',fontWeight:600,color:T.label}}>Password</label>
                 <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'.48rem',letterSpacing:'.08em',color:T.muted}}>ENCRYPTED</span>
               </div>
-              <input className="hell-input" type="password" value={pass} onChange={e=>{setPass(e.target.value);onType()}} autoComplete="current-password" placeholder="••••••••"/>
+              <input
+                className="hell-input"
+                type="password"
+                value={pass}
+                onChange={e=>{ setPass(e.target.value); onType(); setError('') }}
+                autoComplete="current-password"
+                placeholder="••••••••"
+                onKeyDown={e=>e.key==='Enter'&&canSubmit&&handleSubmit(e)}
+              />
             </div>
 
-            <button onClick={handleSubmit} disabled={!canSubmit} className={canSubmit?'btn-on':'btn-off'} style={{marginTop:10}}>
-              {loading?(
+            <button
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              className={canSubmit?'btn-on':'btn-off'}
+              style={{marginTop:8}}
+            >
+              {loading ? (
                 <span style={{display:'inline-flex',alignItems:'center',gap:8,justifyContent:'center'}}>
-                  <span className="spin" style={{display:'inline-block',width:12,height:12,borderRadius:'50%',border:'2px solid rgba(255,255,255,0.15)',borderTopColor:'#EDE0D4'}}/>
+                  <span style={{display:'inline-block',width:12,height:12,borderRadius:'50%',border:'2px solid rgba(255,255,255,0.15)',borderTopColor:'#EDE0D4',animation:'spin .7s linear infinite'}}/>
                   Descending…
                 </span>
-              ):'Descent'}
+              ) : 'Descent'}
             </button>
           </div>
 
           {/* footer */}
-          <div style={{
-            marginTop:18,paddingTop:14,
-            borderTop:'1px solid rgba(130,35,0,0.12)',
-            display:'flex',alignItems:'center',justifyContent:'space-between',
-          }}>
+          <div style={{marginTop:16,paddingTop:12,borderTop:'1px solid rgba(130,35,0,0.12)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
             <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'.48rem',color:T.muted,letterSpacing:'.05em'}}>
               v1.0 &nbsp;·&nbsp; depth: ∞
             </span>

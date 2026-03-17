@@ -32,13 +32,21 @@ export async function getQuestion(req: Request, res: Response): Promise<void> {
 
   try {
     const question = await gameService.getQuestion(nodeId, user.participantId);
-    if (!question) {
-      res.status(404).json({ error: 'No question available' });
-      return;
-    }
     res.json(question);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to get question' });
+    const msg = err instanceof Error ? err.message : '';
+
+    if (msg === 'Node is locked') {
+      res.status(403).json({ error: 'Node is locked' });
+    } else if (msg === 'Node is already solved') {
+      res.status(409).json({ error: 'Node is already solved' });
+    } else if (msg === 'Question pool exhausted') {
+      res.status(404).json({ error: 'No questions available for this node' });
+    } else if (msg === 'Node not found') {
+      res.status(404).json({ error: 'Node not found' });
+    } else {
+      res.status(500).json({ error: 'Failed to get question' });
+    }
   }
 }
 
