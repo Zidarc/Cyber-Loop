@@ -104,8 +104,6 @@ export async function getFullGameState(
   if (gsErr) throw new Error('Failed to load game state');
 
   if (!gsRow) {
-    // upsert instead of insert — prevents PK conflict if two requests arrive
-    // simultaneously for the same new participant
     const { data: newGs, error: createErr } = await supabase
       .from('participant_game_state')
       .upsert(
@@ -133,7 +131,6 @@ export async function getFullGameState(
     gsRow = newGs;
   }
 
-  // Unlock start node on first load
   const { data: startNodeData } = await supabase
     .from('nodes')
     .select('id')
@@ -161,7 +158,6 @@ export async function getFullGameState(
     }
   }
 
-  // Fetch all nodes — include is_visible so admin can hide unreleased nodes
   const { data: nodeRows, error: nodesErr } = await supabase
     .from('nodes')
     .select('id, label, node_type, is_visible');
@@ -186,7 +182,6 @@ export async function getFullGameState(
     const isPenalty = n.node_type === 'penalty';
 
     // Penalty nodes: visible only when this participant has unlocked/solved them.
-    // Non-penalty nodes: respect the DB is_visible flag (admin control).
     const isVisible = isPenalty
       ? status === 'unlocked' || status === 'solved'
       : Boolean(n.is_visible);
@@ -266,7 +261,7 @@ export async function getNextQuestion(
   nodeId: number,
   participantId: number
 ): Promise<PublicQuestion> {
-  // Guard: node must be unlocked
+  // node must be unlocked
   const { data: progressRow } = await supabase
     .from('participant_node_progress')
     .select('status')
@@ -278,8 +273,6 @@ export async function getNextQuestion(
   if (!nodeStatus || nodeStatus === 'locked') throw new Error('Node is locked');
   if (nodeStatus === 'solved') throw new Error('Node is already solved');
 
-  // Return existing assignment (handles re-clicks / page refreshes without
-  // consuming a fresh question from the pool)
   const { data: existingAssignment } = await supabase
     .from('participant_question_assignment')
     .select('question_id')
@@ -298,7 +291,6 @@ export async function getNextQuestion(
     return q as PublicQuestion;
   }
 
-  // Determine pool type from node type
   const { data: nodeData } = await supabase
     .from('nodes')
     .select('node_type')
@@ -311,7 +303,6 @@ export async function getNextQuestion(
   const isPenalty = nodeType === 'penalty';
   const poolType: 'main' | 'penalty' = isPenalty ? 'penalty' : 'main';
 
-  // Read last_question_id and last_checkpoint_id from game state
   const { data: gsRow } = await supabase
     .from('participant_game_state')
     .select('last_question_id, last_checkpoint_id')
@@ -323,10 +314,6 @@ export async function getNextQuestion(
   const lastCheckpointId =
     (gsRow as { last_checkpoint_id: number | null } | null)?.last_checkpoint_id;
 
-  // Fetch the full question pool for this pool_type.
-  // node_id on a question is organisational only — the engine does NOT
-  // filter by node_id. All questions in the pool are shared across all
-  // nodes of the same type.
   const { data: poolQuestions } = await supabase
     .from('questions')
     .select('*')
@@ -359,9 +346,6 @@ export async function getNextQuestion(
     if (solvedNodes && solvedNodes.length > 0) {
       const solvedNodeIds = (solvedNodes as { node_id: number }[]).map((n) => n.node_id);
 
-      // Use question_attempts — NOT participant_question_assignment.
-      // Assignments are deleted on solve, so the join against solved nodes
-      // always returns empty rows. question_attempts is never deleted.
       const { data: correctAttempts } = await supabase
         .from('question_attempts')
         .select('question_id')
@@ -388,7 +372,6 @@ export async function getNextQuestion(
 
   const chosen = eligible[Math.floor(Math.random() * eligible.length)];
 
-  // Assign question to this participant + node
   await supabase.from('participant_question_assignment').insert({
     participant_id: participantId,
     node_id: nodeId,
@@ -476,7 +459,7 @@ export async function submitAnswer(
   const normalizedCorrect = String(questionRow.answer ?? '').trim().toLowerCase();
   const isCorrect = normalizedSubmitted === normalizedCorrect;
 
-  // Append-only attempt log — this is what Rule [C] reads from
+  // Append-only attempt log, this is what Rule [C] reads from
   await supabase.from('question_attempts').insert({
     participant_id: participantId,
     question_id: qId,
@@ -517,9 +500,6 @@ export async function submitAnswer(
         current_question_id: qId,
 
         // ── Rule [B]: always write the last SEEN question id ────────────────
-        // Covers correct AND wrong answers. This is what prevents immediate
-        // repeats. After one subsequent draw happens, this value is replaced
-        // by the new question id and the old one is eligible again.
         last_question_id: qId,
 
         penalty_nodes_unlocked: updatedState.penalty_nodes_unlocked,
@@ -625,7 +605,7 @@ async function handleCorrectAnswer(
       submitResult: { correct: true, nextNodeId: null, isFinished: true },
     };
   }
-  // ────────────────────────────────────────────────────────────────────────────
+
 
   const { data: edges } = await supabase
     .from('node_edges')
@@ -720,8 +700,6 @@ async function handleWrongAnswer(
   const updated: GameStateRow = {
     ...gameState,
     total_mistakes: gameState.total_mistakes + 1,
-    // last_question_id is NOT set here — it is written unconditionally
-    // in the submitAnswer upsert as qId, covering both correct and wrong.
     penalty_counter: (gameState.penalty_counter ?? 0) + 1,
   };
 
@@ -744,7 +722,7 @@ async function handleWrongAnswer(
       },
     };
   }
-  // ────────────────────────────────────────────────────────────────────────────
+
 
   // ── Main node wrong answer ──────────────────────────────────────────────────
 
@@ -824,14 +802,12 @@ async function handleWrongAnswer(
     .in('node_id', penaltyNodeIds)
     .in('status', ['unlocked', 'solved']);
 
-  // ── FIX ───────────────────────────────────────────────────────────────
+
   const preservedIds = new Set(
     ((activePenalties || []) as { node_id: number }[]).map((p) => p.node_id)
   );
   preservedIds.add(resetTargetId);
 
-  // Preserve all nodes that were already solved — they sit behind the
-  // checkpoint and should never be wiped by a wrong answer further ahead.
   const { data: alreadySolved } = await supabase
     .from('participant_node_progress')
     .select('node_id')

@@ -165,7 +165,7 @@ const LORE_SECTIONS = [
   {
     tag: '// TRANSMISSION 001',
     title: 'THE GATE HAS OPENED',
-    body: 'The boundary between worlds has collapsed. What was once theory is now reality. You have been chosen — not by chance, but by something far older.',
+    body: 'The boundary between worlds has collapsed. What was once theory is now reality. You have been chosen, not by chance, but by something far older.',
   },
   {
     tag: '// WARNING: CLASSIFIED',
@@ -185,7 +185,7 @@ const LORE_SECTIONS = [
   {
     tag: '// TRANSMISSION 003',
     title: 'THE FINAL NODE AWAITS',
-    body: 'Only when all paths are closed and all challenges met will the exit reveal itself. Until then — you are trapped in the upside down.',
+    body: 'Only when all paths are closed and all challenges met will the exit reveal itself. Until then, you are trapped in the upside down.',
   },
 ]
 
@@ -325,7 +325,7 @@ export default function Landing() {
           <span style={{ fontFamily: '"Cinzel"', fontSize: '.8rem', color: COLORS.primaryRed, letterSpacing: '.2em' }}>RECURSION HELL</span>
         </div>
         <div style={{ display: 'flex', gap: 20 }}>
-          <CornerBtn label="SCOREBOARD" onClick={() => window.location.assign('/scoreboard')} />
+          <CornerBtn label="SCOREBOARD" onClick={() => window.location.assign('/Scoreboard')} />
         </div>
       </nav>
 
@@ -358,8 +358,6 @@ export default function Landing() {
 
       {/* spacer so user scrolls a beat before snap */}
       <div style={{ height: '40vh', position: 'relative', zIndex: 10 }} />
-      {/* bottom fade — softens the snap-back point */}
-
       <FloatingRulebookBtn />
     </div>
   )

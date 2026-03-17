@@ -2,11 +2,6 @@ import { Router } from 'express';
 import { supabase } from '../config/supabase';
 const router = Router();
 
-// Public — no auth needed.
-// All data is read live so it reflects the current game state in real-time:
-//   - score comes from participant_game_state.score
-//   - node_progress contains solved/unsolved status + solve_time for each of 8 nodes + 3 penalty nodes
-//   - penalty nodes use node_ids 9, 10, 11
 
 router.get('/', async (_req, res) => {
   try {

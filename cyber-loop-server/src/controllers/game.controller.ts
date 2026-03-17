@@ -34,7 +34,6 @@ export async function getQuestion(req: Request, res: Response): Promise<void> {
     const question = await gameService.getQuestion(nodeId, user.participantId);
     res.json(question);
   } catch (err) {
-    // getNextQuestion throws typed error messages — map them to correct HTTP codes
     const msg = err instanceof Error ? err.message : '';
 
     if (msg === 'Node is locked') {

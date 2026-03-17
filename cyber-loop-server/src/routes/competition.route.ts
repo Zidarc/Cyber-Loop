@@ -3,7 +3,7 @@ import { getCompetitionStatus } from '../services/competition.service';
 
 const router = Router();
 
-// Public — no auth needed, frontend uses this on landing page before login
+
 router.get('/status', async (_req, res) => {
   try {
     const status = await getCompetitionStatus();

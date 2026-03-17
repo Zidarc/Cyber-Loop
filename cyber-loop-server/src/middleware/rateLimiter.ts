@@ -10,8 +10,6 @@ export const authRateLimiter = rateLimit({
 });
 
 // Answer submissions: 10 attempts per 15 seconds per participant.
-// Keyed on participantId (set by verifyToken before this runs) so teams
-// on shared networks don't interfere with each other.
 export const answerRateLimiter = rateLimit({
   windowMs: 15 * 1000,
   max: 10,

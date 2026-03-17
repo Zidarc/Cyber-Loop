@@ -493,14 +493,14 @@ export default function Login() {
         <div style={{position:'relative',zIndex:2}}>
           <BulbStrip typing={typing}/>
 
-          {/* ── TITLE — single line, smaller size ── */}
+          {/* ── TITLE ── */}
           <div style={{textAlign:'center',margin:'12px 0 20px'}}>
             <h1
               className="title-flicker"
               style={{
                 fontFamily:'"Cinzel",serif',
                 fontWeight:900,
-                fontSize:'clamp(1.3rem,5.5vw,1.65rem)',  /* fits "RECURSION HELL" on one line at 400px */
+                fontSize:'clamp(1.3rem,5.5vw,1.65rem)',
                 letterSpacing:'.06em',
                 whiteSpace:'nowrap',
                 background:`linear-gradient(175deg,${T.titleTop} 0%,#8B0000 55%,${T.titleBot} 100%)`,

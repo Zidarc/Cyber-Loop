@@ -4,9 +4,6 @@
 --          Supabase manages migrations separately.
 -- =============================================================================
 
--- ── Extension required for password hashing in seed scripts ──────────────────
--- CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
 -- ── competition_config ────────────────────────────────────────────────────────
 -- Single-row table (id = 1 enforced by CHECK constraint).
 -- Managed exclusively by the admin server.
@@ -194,7 +191,6 @@ CREATE TABLE public.participant_game_state (
 );
 
 -- ── leaderboard ───────────────────────────────────────────────────────────────
--- Written once when a participant solves the final node.
 -- The live leaderboard route reads participant_game_state + participant_node_progress
 -- directly for real-time rankings. This table is the final snapshot only.
 --

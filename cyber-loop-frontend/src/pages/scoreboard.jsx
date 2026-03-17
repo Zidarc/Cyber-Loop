@@ -173,7 +173,7 @@ function ScoreRow({ row, isYou, index, rowRef }) {
 
   const getNodeBg = (node) => {
     if (node.node_id === 3 || node.node_id === 5) return 'rgba(6, 182, 212, 0.08)'
-    if (node.node_id === 8)                        return 'rgba(255, 215, 0, 0.08)'  // ← gold tint for final
+    if (node.node_id === 8)                        return 'rgba(255, 215, 0, 0.08)'
     return 'transparent'
   }
 
@@ -224,29 +224,11 @@ function ScoreRow({ row, isYou, index, rowRef }) {
         </span>
       </td>
 
-      {/* START — node 1 */}
-      {(() => {
-        const node1 = row.nodes.find(n => n.node_id === 1);
-        const solved = node1?.status === 'solved';
-        return (
-          <td style={{ ...tdStyle, width: 60 }}>
-            <span style={{
-              fontFamily: C.fontMono,
-              fontSize: C.fzBase,
-              fontWeight: 700,
-              color: solved ? C.green : C.textDim,
-            }}>
-              {solved ? '✓' : '−−'}
-            </span>
-          </td>
-        );
-      })()}
-
       {/* NODES 1-8 */}
-      {row.nodes.filter(n => n.node_id >= 2 && n.node_id <= 8).map(node => (
+      {row.nodes.filter(n => n.node_id >= 1 && n.node_id <= 8).map(node => (
         <td key={node.node_id} style={{ ...tdStyle, width:50, background: getNodeBg(node) }}>
           <span style={{ fontFamily:C.fontMono, fontSize:C.fzBase, fontWeight: node.status === 'solved' ? 700 : 400, color: getNodeColor(node) }}>
-            {node.status === 'solved' ? '→' : '−−'}
+            {node.status === 'solved' ? '✓' : '--'}
           </span>
         </td>
       ))}
@@ -255,7 +237,7 @@ function ScoreRow({ row, isYou, index, rowRef }) {
       {row.nodes.filter(n => n.node_id >= 9).map(node => (
         <td key={node.node_id} style={{ ...tdStyle, width:50, background: 'rgba(248, 113, 113, 0.08)' }}>
           <span style={{ fontFamily:C.fontMono, fontSize:C.fzBase, fontWeight: node.status === 'solved' ? 700 : 400, color: getNodeColor(node) }}>
-            {node.status === 'solved' ? '→' : '−−'}
+            {node.status === 'solved' ? '✓' : '--'}
           </span>
         </td>
       ))}
@@ -295,7 +277,7 @@ function Th({ children, width, style: extraStyle }) {
       fontWeight: 400,
       whiteSpace: 'nowrap',
       width: width ?? 'auto',
-      ...extraStyle,          // ← apply caller's style overrides
+      ...extraStyle,
     }}>{children}</th>
   )
 }
@@ -329,7 +311,13 @@ function LiveDot({ connected }) {
    MAIN SCOREBOARD
 ══════════════════════════════════════════════════════ */
 export default function Scoreboard() {
-  const teamName = sessionStorage.getItem('teamName') || ''
+  const [teamName, setTeamName] = useState('')
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setTeamName(sessionStorage.getItem('teamName') || '')
+    }
+  }, [])
 
   const [data,        setData]        = useState([])
   const [loading,     setLoading]     = useState(true)
@@ -338,7 +326,7 @@ export default function Scoreboard() {
 
   const yourRowRef = useRef(null)
 
-  // scroll to your row after first data load
+
   useEffect(() => {
     if (yourRowRef.current) {
       setTimeout(() => {
@@ -347,14 +335,14 @@ export default function Scoreboard() {
     }
   }, [data])
 
-  // ─── fetch from backend ────────────────────────────────────────────────────
+  // ─── fetch from backend ───
   const fetchScores = useCallback(async () => {
     setError('')
     try {
       const res = await apiFetch('/api/leaderboard')
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = await res.json()
-      console.log('API Response:', json) // DEBUG
+      console.log('API Response:', json)
       const mapped = (json || []).map((entry, i) => mapLeaderboardRow(entry, i))
       setData(mapped)
     } catch (err) {
@@ -365,14 +353,14 @@ export default function Scoreboard() {
     }
   }, [])
 
-  // ─── initial load + 30-second silent background poll (fallback only) ───────
+  // ─── initial load + FallBack ───
   useEffect(() => {
     fetchScores()
     const id = setInterval(fetchScores, 30_000)
     return () => clearInterval(id)
   }, [fetchScores])
 
-  // ─── Supabase realtime ─────────────────────────────────────────────────────
+  // ─── Supabase realtime ───
   useEffect(() => {
     const channel = supabase
       .channel('scoreboard-live')
@@ -462,7 +450,7 @@ export default function Scoreboard() {
                   <Th width={50} style={{ background: 'rgba(6, 182, 212, 0.08)' }}>N5◆</Th>
                   <Th width={50}>N6</Th>
                   <Th width={50}>N7</Th>
-                  <Th width={50} style={{ background: 'rgba(255, 215, 0, 0.08)' }}>N8◆</Th>
+                  <Th width={50} style={{ background: 'rgba(255, 215, 0, 0.08)' }}>Final</Th>
                   <Th width={50}>P1</Th>
                   <Th width={50}>P2</Th>
                   <Th width={50}>P3</Th>
