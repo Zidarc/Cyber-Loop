@@ -4,11 +4,6 @@
  */
 const ALLOWED_PREFIXES = ['Audios/', 'Images/', 'PDFs/', 'Text/'] as const;
 
-/**
- * Validates that a stored file_path from the DB is safe to use for Storage.
- * - No path traversal (..), no absolute paths (/)
- * - Must start with one of Audios/, Images/, PDFs/, Text/
- */
 export function isAllowedFilePath(filePath: string | null | undefined): boolean {
   if (filePath == null || typeof filePath !== 'string') return false;
   const trimmed = filePath.trim();

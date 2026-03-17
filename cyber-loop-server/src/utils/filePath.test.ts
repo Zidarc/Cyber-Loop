@@ -1,6 +1,4 @@
-/**
- * Unit tests for file path validation (used by question assets).
- */
+
 import { describe, it, expect } from 'vitest';
 import { isAllowedFilePath } from './filePath';
 

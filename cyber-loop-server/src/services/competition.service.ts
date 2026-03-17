@@ -10,15 +10,13 @@ export type CompetitionStatus = {
   remainingMs: number | null;
 };
 
-// ─── Simple in-memory cache ───────────────────────────────────────────────────
-// Prevents a DB round-trip on every authenticated request (verifyToken calls
-// getCompetitionStatus for every single route behind auth middleware).
+
 let _cache: { status: CompetitionStatus; ts: number } | null = null;
 
 function invalidateCache(): void {
   _cache = null;
 }
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 export async function startCompetition(): Promise<CompetitionStatus> {
   invalidateCache();
@@ -69,7 +67,7 @@ export async function endCompetition(): Promise<void> {
 export async function getCompetitionStatus(): Promise<CompetitionStatus> {
   const now = Date.now();
 
-  // Return cached value if still fresh
+
   if (_cache && now - _cache.ts < CACHE_TTL_MS) {
     return _cache.status;
   }
@@ -100,9 +98,9 @@ export async function getCompetitionStatus(): Promise<CompetitionStatus> {
   const endsAtMs = cfg.ends_at ? new Date(cfg.ends_at).getTime() : null;
   const remainingMs = endsAtMs ? Math.max(0, endsAtMs - now) : null;
 
-  // Auto-end if time has passed but still marked active
+
   if (cfg.is_active && endsAtMs && now >= endsAtMs) {
-    await endCompetition(); // also calls invalidateCache()
+    await endCompetition();
     const status: CompetitionStatus = {
       isActive: false,
       startedAt: cfg.started_at,
