@@ -1,5 +1,7 @@
 import { supabase } from '../config/supabase';
+
 const COMPETITION_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours
+const CACHE_TTL_MS = 5_000;                          // 5-second TTL
 
 export type CompetitionStatus = {
   isActive: boolean;
@@ -8,7 +10,19 @@ export type CompetitionStatus = {
   remainingMs: number | null;
 };
 
+// ─── Simple in-memory cache ───────────────────────────────────────────────────
+// Prevents a DB round-trip on every authenticated request (verifyToken calls
+// getCompetitionStatus for every single route behind auth middleware).
+let _cache: { status: CompetitionStatus; ts: number } | null = null;
+
+function invalidateCache(): void {
+  _cache = null;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function startCompetition(): Promise<CompetitionStatus> {
+  invalidateCache();
+
   const startedAt = new Date();
   const endsAt = new Date(startedAt.getTime() + COMPETITION_DURATION_MS);
 
@@ -39,6 +53,8 @@ export async function startCompetition(): Promise<CompetitionStatus> {
 }
 
 export async function endCompetition(): Promise<void> {
+  invalidateCache();
+
   await supabase
     .from('competition_config')
     .update({ is_active: false })
@@ -51,6 +67,13 @@ export async function endCompetition(): Promise<void> {
 }
 
 export async function getCompetitionStatus(): Promise<CompetitionStatus> {
+  const now = Date.now();
+
+  // Return cached value if still fresh
+  if (_cache && now - _cache.ts < CACHE_TTL_MS) {
+    return _cache.status;
+  }
+
   const { data, error } = await supabase
     .from('competition_config')
     .select('*')
@@ -58,7 +81,14 @@ export async function getCompetitionStatus(): Promise<CompetitionStatus> {
     .maybeSingle();
 
   if (error || !data) {
-    return { isActive: false, startedAt: null, endsAt: null, remainingMs: null };
+    const status: CompetitionStatus = {
+      isActive: false,
+      startedAt: null,
+      endsAt: null,
+      remainingMs: null,
+    };
+    _cache = { status, ts: now };
+    return status;
   }
 
   const cfg = data as {
@@ -67,25 +97,28 @@ export async function getCompetitionStatus(): Promise<CompetitionStatus> {
     ends_at: string | null;
   };
 
-  const now = Date.now();
-  const endsAt = cfg.ends_at ? new Date(cfg.ends_at).getTime() : null;
-  const remainingMs = endsAt ? Math.max(0, endsAt - now) : null;
+  const endsAtMs = cfg.ends_at ? new Date(cfg.ends_at).getTime() : null;
+  const remainingMs = endsAtMs ? Math.max(0, endsAtMs - now) : null;
 
-  // Auto-end if time passed but still marked active
-  if (cfg.is_active && endsAt && now >= endsAt) {
-    await endCompetition();
-    return {
+  // Auto-end if time has passed but still marked active
+  if (cfg.is_active && endsAtMs && now >= endsAtMs) {
+    await endCompetition(); // also calls invalidateCache()
+    const status: CompetitionStatus = {
       isActive: false,
       startedAt: cfg.started_at,
       endsAt: cfg.ends_at,
       remainingMs: 0,
     };
+    _cache = { status, ts: Date.now() };
+    return status;
   }
 
-  return {
+  const status: CompetitionStatus = {
     isActive: cfg.is_active,
     startedAt: cfg.started_at,
     endsAt: cfg.ends_at,
     remainingMs,
   };
+  _cache = { status, ts: now };
+  return status;
 }
