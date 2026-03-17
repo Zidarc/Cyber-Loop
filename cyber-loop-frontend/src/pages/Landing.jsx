@@ -246,7 +246,6 @@ export default function Landing() {
 
   useEffect(() => {
     let snapping = false
-
     const handleScroll = () => {
       if (snapping) return
       const scrolled = window.scrollY
@@ -257,7 +256,6 @@ export default function Landing() {
         setTimeout(() => { snapping = false }, 1000)
       }
     }
-
     const handleWheel = (e) => {
       if (snapping) return
       if (window.scrollY < 50 && e.deltaY < 0) {
@@ -267,7 +265,6 @@ export default function Landing() {
         setTimeout(() => { snapping = false }, 1000)
       }
     }
-
     window.addEventListener('scroll', handleScroll)
     window.addEventListener('wheel', handleWheel)
     return () => {
@@ -276,9 +273,8 @@ export default function Landing() {
     }
   }, [])
 
-
   return (
-    <div style={{ background: COLORS.bg, position: 'relative'  }}>
+    <div style={{ background: COLORS.bg, position: 'relative' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Share+Tech+Mono&display=swap');
         html, body, * { cursor: none !important; user-select: none; }
@@ -294,6 +290,7 @@ export default function Landing() {
           0%, 100% { transform: translateY(0); }
           50%      { transform: translateY(-10px); }
         }
+        @keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
         .st-title {
           color: transparent;
           -webkit-text-stroke: 1.5px ${COLORS.primaryRed};
@@ -311,8 +308,6 @@ export default function Landing() {
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.75, zIndex: activeVideo === 'B' ? 2 : 1 }}>
           <source src="/Mindflayer.mp4" type="video/mp4" />
         </video>
-
-
       </div>
 
       <EmberCanvas />
@@ -321,11 +316,12 @@ export default function Landing() {
       {/* ══ FIXED NAVBAR ══ */}
       <nav style={{ position: 'fixed', top: 0, width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '30px 50px', zIndex: 100, boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 8, height: 8, background: COLORS.primaryRed, borderRadius: '50%', boxShadow: `0 0 10px ${COLORS.primaryRed}` }} />
+          <div style={{ width: 8, height: 8, background: COLORS.primaryRed, borderRadius: '50%', boxShadow: `0 0 10px ${COLORS.primaryRed}`, animation: 'blink 2s step-start infinite' }} />
           <span style={{ fontFamily: '"Cinzel"', fontSize: '.8rem', color: COLORS.primaryRed, letterSpacing: '.2em' }}>RECURSION HELL</span>
         </div>
-        <div style={{ display: 'flex', gap: 20 }}>
-          <CornerBtn label="SCOREBOARD" onClick={() => window.location.assign('/scoreboard')} />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <CornerBtn label="SCOREBOARD" onClick={() => window.location.assign('/Scoreboard')} />
+          <CornerBtn label="TEAM" onClick={() => window.location.assign('/team')} />
         </div>
       </nav>
 
@@ -356,9 +352,7 @@ export default function Landing() {
       {/* ══ SCROLL SECTIONS ══ */}
       <ScrollSections />
 
-      {/* spacer so user scrolls a beat before snap */}
       <div style={{ height: '40vh', position: 'relative', zIndex: 10 }} />
-      {/* bottom fade — softens the snap-back point */}
 
       <FloatingRulebookBtn />
     </div>
