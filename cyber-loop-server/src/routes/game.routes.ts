@@ -6,6 +6,7 @@ import {
   getQuestion,
   submitAnswer,
   getQuestionFile,
+  getQuestionFiles,
 } from '../controllers/game.controller';
 import {
   handleValidation,
@@ -20,6 +21,7 @@ router.use(verifyToken);
 
 router.get('/state', getState);
 router.get('/node/:nodeId/question', nodeQuestionValidation, handleValidation, getQuestion);
+router.get('/question/:questionId/files', questionFileValidation, handleValidation, getQuestionFiles);
 router.get('/question/:questionId/file', questionFileValidation, handleValidation, getQuestionFile);
 router.post('/answer', answerRateLimiter, gameAnswerValidation, handleValidation, submitAnswer);
 
