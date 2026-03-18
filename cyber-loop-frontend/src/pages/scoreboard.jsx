@@ -16,9 +16,9 @@ const C = {
   glowRed:     'rgba(227,18,18,0.35)',
   redDiv:      'rgba(227,18,18,0.30)',
   redBorder:   'rgba(227,18,18,0.25)',
-  gold:        '#FFD700',
-  goldGlow:    'rgba(255,215,0,0.25)',
-  goldBg:      'rgba(255,215,0,0.06)',
+  gold:        '#F5C842',
+  goldGlow:    'rgba(245,200,66,0.28)',
+  goldBg:      'rgba(245,200,66,0.07)',
   silver:      '#C8C8D4',
   silverGlow:  'rgba(192,192,192,0.18)',
   silverBg:    'rgba(192,192,192,0.04)',
@@ -45,7 +45,7 @@ const C = {
 }
 
 /* ══════════════════════════════════════════════════════
-   MAP API RESPONSE → ROW SHAPE
+   MAP API RESPONSE → ROW SHAPE  (backend untouched)
 ══════════════════════════════════════════════════════ */
 function mapLeaderboardRow(entry, index) {
   return {
@@ -157,24 +157,17 @@ function ScoreRow({ row, isYou, index, rowRef }) {
   const getNodeColor = (node) => {
     const isSolved = node.status === 'solved'
     const isPenalty = node.node_id >= 9
-    const isFinal = node.node_id === 8
-    const isCheckpoint = node.node_id === 3 || node.node_id === 5
-
-    if (isPenalty) {
-      return isSolved ? '#f87171' : 'rgba(248, 113, 113, 0.35)'
-    } else if (isFinal) {
-      return isSolved ? '#FFD700' : 'rgba(255, 215, 0, 0.35)'
-    } else if (isCheckpoint) {
-      return isSolved ? '#06b6d4' : 'rgba(6, 182, 212, 0.35)'
-    } else {
-      return isSolved ? '#4ade80' : 'rgba(74, 222, 128, 0.35)'
-    }
+    const isFinal   = node.node_id === 8
+    const isCheck   = node.node_id === 3 || node.node_id === 5
+    // all in ember/red/gold palette — no teal, no green
+    if (isPenalty) return isSolved ? '#FF6B35'              : 'rgba(255,107,53,0.28)'   // ember orange
+    if (isFinal)   return isSolved ? '#F5C842'              : 'rgba(245,200,66,0.28)'   // gold
+    if (isCheck)   return isSolved ? '#FF9944'              : 'rgba(255,153,68,0.28)'   // warm amber
+    return           isSolved      ? '#FF4422'              : 'rgba(255,68,34,0.28)'    // bright red
   }
 
   const getNodeBg = (node) => {
-    if (node.node_id === 3 || node.node_id === 5) return 'rgba(6, 182, 212, 0.08)'
-    if (node.node_id === 8)                        return 'rgba(255, 215, 0, 0.08)'
-    return 'transparent'
+    return 'transparent'  // no column bg tints — they cause color mixing issues
   }
 
   return (
@@ -198,13 +191,13 @@ function ScoreRow({ row, isYou, index, rowRef }) {
       {/* RANK */}
       <td style={{ ...tdStyle, width:60, paddingLeft:18 }}>
         {rs
-          ? <span style={{ fontFamily:C.fontTitle, fontWeight:900, fontSize:C.fzLg, color:rs.color, textShadow:`0 0 16px ${rs.glow}`, letterSpacing:'.04em' }}>{rs.medal}</span>
+          ? <span style={{ fontFamily:C.fontTitle, fontWeight:900, fontSize:C.fzLg, color:rs.color, textShadow:`0 0 16px ${rs.glow}` }}>{rs.medal}</span>
           : <span style={{ fontFamily:C.fontMono, fontSize:C.fzBase, color:C.textHeader }}>#{row.rank}</span>
         }
       </td>
 
       {/* TEAM NAME */}
-      <td style={{ ...tdStyle, minWidth:180, textAlign: 'left', borderRight: `1px solid ${C.border}` }}>
+      <td style={{ ...tdStyle, minWidth:180, textAlign:'left' }}>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           <span style={{ fontFamily:C.fontTitle, fontWeight:700, fontSize:C.fzLg, color:textColor, textShadow: rs ? `0 0 12px ${rs.glow}` : 'none', letterSpacing:'.04em' }}>
             {row.team}
@@ -235,14 +228,14 @@ function ScoreRow({ row, isYou, index, rowRef }) {
 
       {/* PENALTIES */}
       {row.nodes.filter(n => n.node_id >= 9).map(node => (
-        <td key={node.node_id} style={{ ...tdStyle, width:50, background: 'rgba(248, 113, 113, 0.08)' }}>
+        <td key={node.node_id} style={{ ...tdStyle, width:50, background: getNodeBg(node) }}>
           <span style={{ fontFamily:C.fontMono, fontSize:C.fzBase, fontWeight: node.status === 'solved' ? 700 : 400, color: getNodeColor(node) }}>
             {node.status === 'solved' ? '✓' : '--'}
           </span>
         </td>
       ))}
 
-      {/* ✗ MISTAKES */}
+      {/* MISTAKES */}
       <td style={{ ...tdStyle, width:70 }}>
         <span style={{ fontFamily:C.fontMono, fontSize:C.fzBase, color: row.totalMistakes > 0 ? C.wrong : C.textDim }}>
           {row.totalMistakes > 0 ? row.totalMistakes : '—'}
@@ -250,7 +243,7 @@ function ScoreRow({ row, isYou, index, rowRef }) {
       </td>
 
       {/* PENALTY COUNTER */}
-      <td style={{ ...tdStyle, width:70, borderRight: 'none' }}>
+      <td style={{ ...tdStyle, width:70, borderRight:'none' }}>
         {row.penaltyCounter > 0
           ? <span style={{ fontFamily:C.fontMono, fontSize:C.fzBase, color:C.wrong, fontWeight:700 }}>+{row.penaltyCounter}</span>
           : <span style={{ fontFamily:C.fontMono, fontSize:C.fzSm, color:C.textDim }}>—</span>
@@ -263,7 +256,7 @@ function ScoreRow({ row, isYou, index, rowRef }) {
 /* ══════════════════════════════════════════════════════
    COLUMN HEADER
 ══════════════════════════════════════════════════════ */
-function Th({ children, width, style: extraStyle }) {
+function Th({ children, width, borderColor }) {
   return (
     <th style={{
       padding: '12px 12px',
@@ -271,13 +264,13 @@ function Th({ children, width, style: extraStyle }) {
       fontFamily: C.fontMono,
       fontSize: C.fzXs,
       letterSpacing: '.12em',
-      color: C.textHeader,
-      borderBottom: `1px solid ${C.redBorder}`,
+      color: borderColor ? borderColor : C.textHeader,
+      borderBottom: `2px solid ${borderColor ?? C.redBorder}`,
       borderRight: `1px solid ${C.redBorder}`,
       fontWeight: 400,
       whiteSpace: 'nowrap',
       width: width ?? 'auto',
-      ...extraStyle,
+      background: 'transparent',
     }}>{children}</th>
   )
 }
@@ -289,21 +282,57 @@ function LiveDot({ connected }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:6 }}>
       <div style={{
-        width: 6, height: 6, borderRadius: '50%',
+        width:6, height:6, borderRadius:'50%',
         background: connected ? C.green : 'rgba(255,255,255,0.20)',
         boxShadow: connected ? `0 0 8px ${C.green}` : 'none',
         animation: connected ? 'pulse 2s ease-in-out infinite' : 'none',
         transition: 'background .4s, box-shadow .4s',
-      }} />
-      <span style={{
-        fontFamily: C.fontMono, fontSize: C.fzXs,
-        letterSpacing: '.10em',
-        color: connected ? C.greenMuted : C.textDim,
-        transition: 'color .4s',
-      }}>
+      }}/>
+      <span style={{ fontFamily:C.fontMono, fontSize:C.fzXs, letterSpacing:'.10em', color: connected ? C.greenMuted : C.textDim, transition:'color .4s' }}>
         {connected ? 'LIVE' : 'CONNECTING...'}
       </span>
     </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════
+   CENTERED FULL PAGE STATE — loading / error / empty
+══════════════════════════════════════════════════════ */
+function FullPageState({ children }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 20,
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      gap: 24,
+    }}>
+      {children}
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════
+   LOADING SPINNER
+══════════════════════════════════════════════════════ */
+function LoadingScreen() {
+  return (
+    <FullPageState>
+      {/* spinning ring */}
+      <div style={{
+        width: 56, height: 56, borderRadius: '50%',
+        border: `2px solid rgba(227,18,18,0.15)`,
+        borderTop: `2px solid ${C.red}`,
+        animation: 'spin 1s linear infinite',
+      }}/>
+      <div style={{ textAlign: 'center' }}>
+        <p style={{ fontFamily: C.fontTitle, fontSize: C.fzBase, fontWeight: 700, letterSpacing: '.28em', color: 'rgba(255,255,255,0.70)', marginBottom: 8 }}>
+          LOADING SCOREBOARD
+        </p>
+        <p style={{ fontFamily: C.fontMono, fontSize: C.fzXs, letterSpacing: '.18em', color: C.textDim, animation: 'pulse 2s ease-in-out infinite' }}>
+          CONNECTING TO DATABASE...
+        </p>
+      </div>
+    </FullPageState>
   )
 }
 
@@ -312,30 +341,23 @@ function LiveDot({ connected }) {
 ══════════════════════════════════════════════════════ */
 export default function Scoreboard() {
   const [teamName, setTeamName] = useState('')
-
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setTeamName(sessionStorage.getItem('teamName') || '')
-    }
+    if (typeof window !== 'undefined') setTeamName(sessionStorage.getItem('teamName') || '')
   }, [])
 
   const [data,        setData]        = useState([])
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState('')
   const [rtConnected, setRtConnected] = useState(false)
-
   const yourRowRef = useRef(null)
-
 
   useEffect(() => {
     if (yourRowRef.current) {
-      setTimeout(() => {
-        yourRowRef.current.scrollIntoView({ behavior:'smooth', block:'center' })
-      }, 600)
+      setTimeout(() => { yourRowRef.current.scrollIntoView({ behavior:'smooth', block:'center' }) }, 600)
     }
   }, [data])
 
-  // ─── fetch from backend ───
+  // ─── fetch from backend — UNTOUCHED ───
   const fetchScores = useCallback(async () => {
     setError('')
     try {
@@ -353,24 +375,21 @@ export default function Scoreboard() {
     }
   }, [])
 
-  // ─── initial load + FallBack ───
+  // ─── initial load + poll — UNTOUCHED ───
   useEffect(() => {
     fetchScores()
     const id = setInterval(fetchScores, 30_000)
     return () => clearInterval(id)
   }, [fetchScores])
 
-  // ─── Supabase realtime ───
+  // ─── Supabase realtime — UNTOUCHED ───
   useEffect(() => {
     const channel = supabase
       .channel('scoreboard-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'participant_game_state' },   fetchScores)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'participant_node_progress' }, fetchScores)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leaderboard' },              fetchScores)
-      .subscribe((status) => {
-        setRtConnected(status === 'SUBSCRIBED')
-      })
-
+      .on('postgres_changes', { event:'*', schema:'public', table:'participant_game_state' },   fetchScores)
+      .on('postgres_changes', { event:'*', schema:'public', table:'participant_node_progress' }, fetchScores)
+      .on('postgres_changes', { event:'*', schema:'public', table:'leaderboard' },              fetchScores)
+      .subscribe((status) => { setRtConnected(status === 'SUBSCRIBED') })
     return () => { supabase.removeChannel(channel) }
   }, [fetchScores])
 
@@ -384,6 +403,7 @@ export default function Scoreboard() {
         @keyframes blink  { 0%,49%{opacity:1} 50%,100%{opacity:0} }
         @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
         @keyframes pulse  { 0%,100%{opacity:.6} 50%{opacity:1} }
+        @keyframes spin   { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
         .back-btn:hover { color:#fff!important; }
         ::-webkit-scrollbar { width:4px; height:4px; }
         ::-webkit-scrollbar-track { background:transparent; }
@@ -391,51 +411,60 @@ export default function Scoreboard() {
       `}</style>
 
       {/* BG */}
-      <div style={{ position:'fixed', inset:0, zIndex:0, background:`radial-gradient(ellipse 90% 80% at 50% 100%, rgba(227,18,18,0.07) 0%, transparent 65%)` }} />
-      <EmberCanvas />
-      <LightningLayer />
-      <SplashCursor />
+      <div style={{ position:'fixed', inset:0, zIndex:0, background:`radial-gradient(ellipse 90% 80% at 50% 100%, rgba(227,18,18,0.07) 0%, transparent 65%)` }}/>
+      <EmberCanvas/>
+      <LightningLayer/>
+      <SplashCursor/>
 
       {/* NAVBAR */}
       <nav style={{ position:'fixed', top:0, left:0, right:0, zIndex:50, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'18px 40px', borderBottom:`1px solid rgba(255,255,255,0.05)`, backdropFilter:'blur(10px)', background:'rgba(5,4,5,0.60)' }}>
-
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          <div style={{ width:7, height:7, background:C.red, borderRadius:'50%', boxShadow:`0 0 10px ${C.red}`, animation:'blink 2s step-start infinite' }} />
-          <span style={{ fontFamily:C.fontTitle, fontSize:C.fzSm, fontWeight:700, color:C.red, letterSpacing:'.20em', textShadow:`0 0 10px ${C.glowRed}` }}>
-            RECURSION HELL
-          </span>
+          <div style={{ width:7, height:7, background:C.red, borderRadius:'50%', boxShadow:`0 0 10px ${C.red}`, animation:'blink 2s step-start infinite' }}/>
+          <span style={{ fontFamily:C.fontTitle, fontSize:C.fzSm, fontWeight:700, color:C.red, letterSpacing:'.20em', textShadow:`0 0 10px ${C.glowRed}` }}>RECURSION HELL</span>
         </div>
-
-        <span style={{ fontFamily:C.fontTitle, fontSize:C.fzBase, fontWeight:700, letterSpacing:'.28em', color:C.textPrimary }}>
-          SCOREBOARD
-        </span>
-
+        <span style={{ fontFamily:C.fontTitle, fontSize:C.fzBase, fontWeight:700, letterSpacing:'.28em', color:C.textPrimary }}>SCOREBOARD</span>
         <div style={{ display:'flex', alignItems:'center', gap:20 }}>
-          <LiveDot connected={rtConnected} />
+          <LiveDot connected={rtConnected}/>
           <button className="back-btn" onClick={() => window.location.assign('/gamepage')} style={{ background:'none', border:'none', cursor:'none', fontFamily:C.fontMono, fontSize:C.fzXs, letterSpacing:'.10em', color:C.textHeader, transition:'color .18s' }}>
             ← BACK
           </button>
         </div>
       </nav>
 
-      {/* TABLE */}
-      <div style={{ position:'relative', zIndex:10, paddingTop:80, paddingBottom:48, overflowX:'auto', animation:'fadeIn .5s ease-out' }}>
+      {/* ── LOADING STATE — perfectly centred ── */}
+      {loading && data.length === 0 && <LoadingScreen/>}
 
-        {error && (
-          <div style={{ margin:'20px 40px', padding:'12px 20px', background:'rgba(90,0,0,0.25)', border:'1px solid rgba(160,0,0,0.35)', borderRadius:8, fontFamily:C.fontMono, fontSize:C.fzSm, color:'#EDE0D4', display:'flex', gap:10, alignItems:'center' }}>
-            <span style={{ color:'#DD2200' }}>⚠</span>{error}
-            <button onClick={fetchScores} style={{ marginLeft:'auto', background:'none', border:'1px solid rgba(227,18,18,0.4)', borderRadius:6, color:C.red, fontFamily:C.fontMono, fontSize:C.fzXs, padding:'4px 12px', cursor:'none', letterSpacing:'.1em' }}>RETRY</button>
+      {/* ── ERROR STATE — centred ── */}
+      {error && data.length === 0 && (
+        <FullPageState>
+          <span style={{ fontSize:'2rem' }}>⚠</span>
+          <div style={{ textAlign:'center' }}>
+            <p style={{ fontFamily:C.fontTitle, fontSize:C.fzBase, fontWeight:700, letterSpacing:'.20em', color:'rgba(255,255,255,0.70)', marginBottom:8 }}>
+              FAILED TO LOAD
+            </p>
+            <p style={{ fontFamily:C.fontMono, fontSize:C.fzXs, letterSpacing:'.14em', color:C.textDim, marginBottom:24 }}>
+              {error}
+            </p>
+            <button onClick={fetchScores} style={{ background:'rgba(227,18,18,0.10)', border:`1px solid rgba(227,18,18,0.40)`, borderRadius:6, color:C.red, fontFamily:C.fontMono, fontSize:C.fzXs, padding:'8px 24px', cursor:'none', letterSpacing:'.12em', transition:'all .2s' }}
+              onMouseEnter={e=>{ e.currentTarget.style.background='rgba(227,18,18,0.22)' }}
+              onMouseLeave={e=>{ e.currentTarget.style.background='rgba(227,18,18,0.10)' }}
+            >RETRY</button>
           </div>
-        )}
+        </FullPageState>
+      )}
 
-        {loading && data.length === 0 && (
-          <div style={{ padding:'60px 0', textAlign:'center', fontFamily:C.fontMono, fontSize:C.fzSm, letterSpacing:'.2em', color:C.textDim }}>
-            LOADING SCOREBOARD...
-          </div>
-        )}
+      {/* ── ERROR BANNER (when data exists but refresh failed) ── */}
+      {error && data.length > 0 && (
+        <div style={{ position:'fixed', top:72, left:40, right:40, zIndex:40, padding:'10px 18px', background:'rgba(90,0,0,0.28)', border:'1px solid rgba(160,0,0,0.35)', borderRadius:8, fontFamily:C.fontMono, fontSize:C.fzSm, color:'#EDE0D4', display:'flex', gap:10, alignItems:'center' }}>
+          <span style={{ color:'#DD2200' }}>⚠</span> {error}
+          <button onClick={fetchScores} style={{ marginLeft:'auto', background:'none', border:`1px solid rgba(227,18,18,0.4)`, borderRadius:6, color:C.red, fontFamily:C.fontMono, fontSize:C.fzXs, padding:'4px 12px', cursor:'none', letterSpacing:'.1em' }}>RETRY</button>
+        </div>
+      )}
 
-        {data.length > 0 && (
-          <div style={{ marginLeft: 40, marginRight: 40 }}>
+      {/* ── TABLE ── */}
+      {data.length > 0 && (
+        <div style={{ position:'relative', zIndex:10, paddingTop:80, paddingBottom:48, overflowX:'auto', animation:'fadeIn .5s ease-out' }}>
+          <div style={{ marginLeft:40, marginRight:40 }}>
             <table style={{ width:'100%', borderCollapse:'collapse' }}>
               <thead>
                 <tr>
@@ -445,15 +474,15 @@ export default function Scoreboard() {
                   <Th width={60}>START</Th>
                   <Th width={50}>N1</Th>
                   <Th width={50}>N2</Th>
-                  <Th width={50} style={{ background: 'rgba(6, 182, 212, 0.08)' }}>N3◆</Th>
+                  <Th width={50} borderColor='rgba(255,153,68,0.60)'>N3◆</Th>
                   <Th width={50}>N4</Th>
-                  <Th width={50} style={{ background: 'rgba(6, 182, 212, 0.08)' }}>N5◆</Th>
+                  <Th width={50} borderColor='rgba(255,153,68,0.60)'>N5◆</Th>
                   <Th width={50}>N6</Th>
                   <Th width={50}>N7</Th>
-                  <Th width={50} style={{ background: 'rgba(255, 215, 0, 0.08)' }}>Final</Th>
-                  <Th width={50}>P1</Th>
-                  <Th width={50}>P2</Th>
-                  <Th width={50}>P3</Th>
+                  <Th width={50} borderColor='rgba(245,200,66,0.75)'>Final</Th>
+                  <Th width={50} borderColor='rgba(227,18,18,0.60)'>P1</Th>
+                  <Th width={50} borderColor='rgba(227,18,18,0.60)'>P2</Th>
+                  <Th width={50} borderColor='rgba(227,18,18,0.60)'>P3</Th>
                   <Th width={70}>✗</Th>
                   <Th width={70}>PEN</Th>
                 </tr>
@@ -471,16 +500,19 @@ export default function Scoreboard() {
               </tbody>
             </table>
           </div>
-        )}
+        </div>
+      )}
 
-        {!loading && !error && data.length === 0 && (
-          <div style={{ textAlign:'center', padding:'80px 0', fontFamily:C.fontMono, fontSize:C.fzSm, letterSpacing:'.18em', color:C.textDim }}>
+      {/* empty state */}
+      {!loading && !error && data.length === 0 && (
+        <FullPageState>
+          <p style={{ fontFamily:C.fontMono, fontSize:C.fzSm, letterSpacing:'.18em', color:C.textDim }}>
             NO TEAMS REGISTERED YET
-          </div>
-        )}
-      </div>
+          </p>
+        </FullPageState>
+      )}
 
-      <div style={{ position:'fixed', bottom:0, left:0, right:0, height:120, zIndex:0, pointerEvents:'none', background:'linear-gradient(0deg, rgba(180,20,0,0.18) 0%, transparent 100%)' }} />
+      <div style={{ position:'fixed', bottom:0, left:0, right:0, height:120, zIndex:0, pointerEvents:'none', background:'linear-gradient(0deg, rgba(180,20,0,0.18) 0%, transparent 100%)' }}/>
     </div>
   )
 }
