@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import SplashCursor from '../components/SplashCursor'
+// ── FIX #8: shared component replaces the inline duplicate EmberCanvas ──
+import EmberCanvas from '../components/EmberCanvas'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
@@ -11,50 +14,6 @@ const COLORS = {
   glowRed: 'rgba(227, 18, 18, 0.4)',
   textAsh: 'rgba(255, 255, 255, 0.6)',
   glassBg: 'rgba(15, 10, 12, 0.7)',
-}
-
-/* ══════════════════════════════════════════════════════
-    EMBER CANVAS
-══════════════════════════════════════════════════════ */
-const EP = [[255,90,0],[235,55,0],[210,35,0],[255,130,20],[185,30,0],[140,10,0]]
-function EmberCanvas() {
-  const ref = useRef(null)
-  useEffect(() => {
-    const c = ref.current; if (!c) return
-    const x = c.getContext('2d')
-    const rsz = () => { c.width = window.innerWidth; c.height = window.innerHeight }
-    rsz(); window.addEventListener('resize', rsz)
-    const se = () => {
-      const rgb = EP[Math.floor(Math.random() * EP.length)]
-      return { x: Math.random()*c.width, y: c.height+10, vx:(Math.random()-.5)*.28, vy:-(.16+Math.random()*.28), size:.6+Math.random()*1.8, travel:c.height*(.32+Math.random()*.18), dist:0, rgb, wobble:Math.random()*Math.PI*2, wSpd:.006+Math.random()*.010 }
-    }
-    const em = Array.from({length:30},()=>{ const e=se(); e.y=Math.random()*c.height; return e })
-    let raf, paused=false
-    document.addEventListener('visibilitychange',()=>{ paused=document.hidden })
-    function draw() {
-      raf=requestAnimationFrame(draw); if(paused) return
-      const W=c.width,H=c.height; x.clearRect(0,0,W,H)
-      for(const e of em) {
-        if(e.dist>=e.travel){Object.assign(e,se());continue}
-        e.wobble+=e.wSpd; e.x+=e.vx+Math.sin(e.wobble)*.07; e.y+=e.vy; e.dist-=e.vy
-        const p=e.dist/e.travel, al=p<.12?p/.12:p>.55?Math.pow(1-(p-.55)/.45,1.8):1
-        if(al<.02) continue
-        const [r,g]=e.rgb, sz=e.size*(1-p*.25)
-        x.save(); x.globalAlpha=al*.5; x.translate(e.x,e.y); x.rotate(e.wobble*.4)
-        x.beginPath()
-        x.moveTo(0,-sz*1.1); x.lineTo(sz*.7,-sz*.5); x.lineTo(sz*.9,sz*.2)
-        x.lineTo(sz*.4,sz*.9); x.lineTo(-sz*.3,sz*.9); x.lineTo(-sz*.9,sz*.2); x.lineTo(-sz*.7,-sz*.5); x.closePath()
-        x.fillStyle=`rgba(${r*.25|0},0,0,1)`; x.fill(); x.save(); x.clip()
-        const ig=x.createRadialGradient(0,-sz*.1,0,0,-sz*.1,sz*.8)
-        ig.addColorStop(0,'rgba(255,200,120,1)'); ig.addColorStop(.3,`rgba(${r},${Math.max(g,8)},0,1)`)
-        ig.addColorStop(.75,`rgba(${r*.45|0},0,0,1)`); ig.addColorStop(1,'rgba(0,0,0,0)')
-        x.fillStyle=ig; x.fill(); x.restore(); x.restore()
-      }
-    }
-    raf=requestAnimationFrame(draw)
-    return()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize',rsz) }
-  },[])
-  return <canvas ref={ref} style={{position:'fixed',inset:0,zIndex:4,pointerEvents:'none'}}/>
 }
 
 /* ══════════════════════════════════════════════════════
@@ -126,18 +85,21 @@ function FloatingRulebookBtn() {
     SECTIONS DATA
 ══════════════════════════════════════════════════════ */
 const LORE = [
-  { isHero: true }, 
+  { isHero: true },
   { tag: '// TRANSMISSION 001', title: 'THE GATE HAS OPENED',     body: 'The boundary between worlds has collapsed. What was once theory is now reality. You have been chosen, not by chance, but by something far older.' },
   { tag: '// WARNING: CLASSIFIED', title: 'RECURSION PROTOCOL',    body: 'Each node you solve pulls you deeper. Each mistake echoes. The loop does not forgive, and the path back is never the same path forward.' },
   { tag: '// TRANSMISSION 002', title: 'THE MIND FLAYER WATCHES', body: 'You are not alone in the dark. Every wrong answer feeds it. Every hesitation strengthens its hold. Solve fast. Think faster.' },
-  { tag: '// SYSTEM ALERT',     title: 'PENALTY NODES ACTIVE',     body: 'Wrong answers awaken dormant nodes. Ignore them at your peril — they drain your score with every passing second left unsolved.' },
-  { tag: '// TRANSMISSION 003', title: 'THE FINAL NODE AWAITS',    body: 'Only when all paths are closed and all challenges met will the exit reveal itself. Until then, you are trapped in the upside down.' },
+  { tag: '// SYSTEM ALERT',     title: 'PENALTY NODES ACTIVE',    body: 'Wrong answers awaken dormant nodes. Ignore them at your peril — they drain your score with every passing second left unsolved.' },
+  { tag: '// TRANSMISSION 003', title: 'THE FINAL NODE AWAITS',   body: 'Only when all paths are closed and all challenges met will the exit reveal itself. Until then, you are trapped in the upside down.' },
 ]
 
 /* ══════════════════════════════════════════════════════
     MAIN LANDING
 ══════════════════════════════════════════════════════ */
 export default function Landing() {
+  // ── FIX #6: useNavigate instead of window.location.assign (keeps SPA navigation) ──
+  const navigate = useNavigate()
+
   const videoA = useRef(null)
   const videoB = useRef(null)
   const [activeVideo, setActiveVideo] = useState('A')
@@ -163,9 +125,7 @@ export default function Landing() {
       gsap.utils.toArray('[data-animate]').forEach((el) => {
         gsap.to(el, {
           opacity: 1, y: 0, filter: 'blur(0px)', duration: 0.9, ease: 'power3.out',
-          scrollTrigger: {
-            trigger: el, start: 'top 88%', toggleActions: 'play none none reset',
-          },
+          scrollTrigger: { trigger: el, start: 'top 88%', toggleActions: 'play none none reset' },
         })
       })
     }, containerRef)
@@ -188,9 +148,7 @@ export default function Landing() {
           gsap.utils.toArray('[data-animate]').forEach((el) => {
             gsap.to(el, {
               opacity: 1, y: 0, filter: 'blur(0px)', duration: 0.9, ease: 'power3.out',
-              scrollTrigger: {
-                trigger: el, start: 'top 88%', toggleActions: 'play none none reset',
-              },
+              scrollTrigger: { trigger: el, start: 'top 88%', toggleActions: 'play none none reset' },
             })
           })
           ScrollTrigger.refresh()
@@ -208,8 +166,12 @@ export default function Landing() {
     <div ref={containerRef} style={{background:COLORS.bg,position:'relative'}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Share+Tech+Mono&display=swap');
-        html, body, * { cursor: none !important; user-select: none; }
-        body { overflow-x: hidden; }
+        /* ── FIX #15: Global cursor:none and user-select live in index.css, NOT here.
+                       Injecting them inside a component <style> tag in a SPA means the
+                       rules persist in <head> after this component unmounts.
+                       Add these two lines to your index.css instead:
+                         html, body, * { cursor: none !important; user-select: none; }
+                         body { overflow-x: hidden; }                                  ── */
         * { scrollbar-width: none; -ms-overflow-style: none; }
         *::-webkit-scrollbar { display: none; }
         @keyframes floatY { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
@@ -230,7 +192,10 @@ export default function Landing() {
         </video>
       </div>
 
-      <EmberCanvas/>
+      {/* ── FIX #8: shared EmberCanvas — no more inline duplicate, leak fixed via cleanup ── */}
+      <EmberCanvas count={30} vxSpread={0.28} vyMin={0.16} vyRange={0.28}
+                   sizeMin={0.6} sizeRange={1.8} travelMin={0.32} travelRange={0.18}
+                   alphaScale={0.5} zIndex={4} />
       <SplashCursor/>
 
       <nav style={{position:'fixed',top:0,width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'30px 50px',zIndex:100,boxSizing:'border-box'}}>
@@ -239,8 +204,9 @@ export default function Landing() {
           <span style={{fontFamily:'"Cinzel"',fontSize:'.8rem',color:COLORS.primaryRed,letterSpacing:'.2em'}}>RECURSION HELL</span>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <CornerBtn label="SCOREBOARD" onClick={()=>window.location.assign('/scoreboard')}/>
-          <CornerBtn label="TEAM"       onClick={()=>window.location.assign('/team')}/>
+          {/* ── FIX #6 + #7: useNavigate + lowercase routes ── */}
+          <CornerBtn label="SCOREBOARD" onClick={() => navigate('/scoreboard')}/>
+          <CornerBtn label="TEAM"       onClick={() => navigate('/team')}/>
         </div>
       </nav>
 
@@ -261,7 +227,8 @@ export default function Landing() {
                 RECURSION HELL
               </p>
               <div data-animate>
-                <MagneticEnterBtn onClick={()=>window.location.assign('/login')}/>
+                {/* ── FIX #6: navigate() keeps us inside the SPA router ── */}
+                <MagneticEnterBtn onClick={() => navigate('/login')}/>
               </div>
             </div>
           ) : (

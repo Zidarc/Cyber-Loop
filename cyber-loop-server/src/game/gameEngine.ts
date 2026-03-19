@@ -63,6 +63,7 @@ export type PublicGameState = {
   lastCheckpointId: number | null;
   lastQuestionId: number | null;
   penaltyNodesUnlocked: number;
+  penaltyCounter: number;
   isFinished: boolean;
   startedAt: string | null;
   finishedAt: string | null;
@@ -208,6 +209,7 @@ export async function getFullGameState(
       lastCheckpointId: gs.last_checkpoint_id,
       lastQuestionId: gs.last_question_id,
       penaltyNodesUnlocked: gs.penalty_nodes_unlocked,
+      penaltyCounter: gs.penalty_counter ?? 0,
       isFinished: Boolean(gs.is_finished),
       startedAt: gs.started_at,
       finishedAt: gs.finished_at,
@@ -697,10 +699,13 @@ async function handleWrongAnswer(
 
   const currentNodeType = (currentNodeData as { node_type: NodeType } | null)?.node_type;
 
+  // penalty_counter only increments on main-node wrong answers, NOT penalty-node wrong answers
   const updated: GameStateRow = {
     ...gameState,
     total_mistakes: gameState.total_mistakes + 1,
-    penalty_counter: (gameState.penalty_counter ?? 0) + 1,
+    penalty_counter: currentNodeType === 'penalty'
+      ? (gameState.penalty_counter ?? 0)
+      : (gameState.penalty_counter ?? 0) + 1,
   };
 
   // ── Penalty node wrong answer ────────────────────────────────────────────────

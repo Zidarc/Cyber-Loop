@@ -1,1 +1,44 @@
-@import "tailwindcss";
+/*
+  ── FIX #15 ─────────────────────────────────────────────────────────────────
+  Global styles that were previously injected via <style> tags inside
+  individual page components (Landing, Endscreen, Login, scoreboard, team).
+
+  In a React SPA, component-injected <style> tags are NOT removed when the
+  component unmounts — they accumulate in <head> across navigation. The rules
+  below belong here, in the real global stylesheet, so they apply once and
+  correctly for the lifetime of the app.
+  ─────────────────────────────────────────────────────────────────────────── */
+
+/* Hide the real cursor everywhere — this is intentional UX for the game */
+html, body, * {
+  cursor: none !important;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Inputs still need text selection to work */
+input, textarea {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+/* Prevent horizontal scroll from wide game content */
+body {
+  overflow-x: hidden;
+}
+
+/* Hide scrollbars globally (the game uses custom scroll triggers) */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+}
+
+/* Base reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}

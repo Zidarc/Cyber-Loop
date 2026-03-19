@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Lightning from '../components/Lightning'
 import SplashCursor from '../components/SplashCursor'
-import { apiFetch } from '../lib/api'
+import { apiFetch } from '../lib/Api'
 import { supabase } from '../lib/supabase'
 
 /* ══════════════════════════════════════════════════════

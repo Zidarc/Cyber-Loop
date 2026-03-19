@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import SplashCursor from '../components/SplashCursor'
 import Lightning from '../components/Lightning'
+// ── FIX #8: shared EmberCanvas replaces the inline duplicate ──
+import EmberCanvas from '../components/EmberCanvas'
 
 /* ══════════════════════════════════════════════════════
    THEME — matches Landing/Scoreboard exactly
@@ -100,50 +103,6 @@ const TIER_CFG = {
 }
 
 /* ══════════════════════════════════════════════════════
-   EMBER CANVAS — same as Landing
-══════════════════════════════════════════════════════ */
-const EP = [[255,90,0],[235,55,0],[210,35,0],[255,130,20],[185,30,0],[140,10,0]]
-function EmberCanvas() {
-  const ref = useRef(null)
-  useEffect(() => {
-    const c = ref.current; if (!c) return
-    const x = c.getContext('2d')
-    const rsz = () => { c.width = window.innerWidth; c.height = window.innerHeight }
-    rsz(); window.addEventListener('resize', rsz)
-    const se = () => {
-      const rgb = EP[Math.floor(Math.random() * EP.length)]
-      return { x:Math.random()*c.width, y:c.height+10, vx:(Math.random()-.5)*.28, vy:-(.16+Math.random()*.28), size:.6+Math.random()*1.8, travel:c.height*(.32+Math.random()*.18), dist:0, rgb, wobble:Math.random()*Math.PI*2, wSpd:.006+Math.random()*.010 }
-    }
-    const em = Array.from({length:30},()=>{ const e=se(); e.y=Math.random()*c.height; return e })
-    let raf, paused=false
-    document.addEventListener('visibilitychange',()=>{ paused=document.hidden })
-    function draw() {
-      raf=requestAnimationFrame(draw); if(paused) return
-      x.clearRect(0,0,c.width,c.height)
-      for(const e of em) {
-        if(e.dist>=e.travel){Object.assign(e,se());continue}
-        e.wobble+=e.wSpd; e.x+=e.vx+Math.sin(e.wobble)*.07; e.y+=e.vy; e.dist-=e.vy
-        const p=e.dist/e.travel, al=p<.12?p/.12:p>.55?Math.pow(1-(p-.55)/.45,1.8):1
-        if(al<.02) continue
-        const [r,g]=e.rgb,sz=e.size*(1-p*.25)
-        x.save(); x.globalAlpha=al*.5; x.translate(e.x,e.y); x.rotate(e.wobble*.4)
-        x.beginPath()
-        x.moveTo(0,-sz*1.1); x.lineTo(sz*.7,-sz*.5); x.lineTo(sz*.9,sz*.2)
-        x.lineTo(sz*.4,sz*.9); x.lineTo(-sz*.3,sz*.9); x.lineTo(-sz*.9,sz*.2); x.lineTo(-sz*.7,-sz*.5); x.closePath()
-        x.fillStyle=`rgba(${r*.25|0},0,0,1)`; x.fill(); x.save(); x.clip()
-        const ig=x.createRadialGradient(0,-sz*.1,0,0,-sz*.1,sz*.8)
-        ig.addColorStop(0,'rgba(255,200,120,1)'); ig.addColorStop(.3,`rgba(${r},${Math.max(g,8)},0,1)`)
-        ig.addColorStop(.75,`rgba(${r*.45|0},0,0,1)`); ig.addColorStop(1,'rgba(0,0,0,0)')
-        x.fillStyle=ig; x.fill(); x.restore(); x.restore()
-      }
-    }
-    raf=requestAnimationFrame(draw)
-    return()=>{ cancelAnimationFrame(raf); window.removeEventListener('resize',rsz) }
-  },[])
-  return <canvas ref={ref} style={{position:'fixed',inset:0,zIndex:4,pointerEvents:'none'}}/>
-}
-
-/* ══════════════════════════════════════════════════════
    LIGHTNING — same as Landing
 ══════════════════════════════════════════════════════ */
 function LightningLayer() {
@@ -204,7 +163,7 @@ function LinkedInIcon({ size=14 }) {
 }
 
 /* ══════════════════════════════════════════════════════
-   DOSSIER CARD — styled like the site's glass panels
+   DOSSIER CARD
 ══════════════════════════════════════════════════════ */
 function DossierCard({ member, index }) {
   const [hov, setHov] = useState(false)
@@ -231,37 +190,24 @@ function DossierCard({ member, index }) {
         overflow:'hidden',
       }}
     >
-      {/* scanlines — same texture as rest of site */}
       <div style={{position:'absolute',inset:0,pointerEvents:'none',backgroundImage:'repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.06) 2px,rgba(0,0,0,0.06) 4px)',opacity:.5,zIndex:0}}/>
-
-      {/* diagonal stamp */}
       <div style={{position:'absolute',top:16,right:-24,transform:'rotate(22deg)',fontFamily:'"Share Tech Mono",monospace',fontSize:'.48rem',letterSpacing:'.20em',color:t.color,border:`1px solid ${t.color}`,padding:'2px 26px',opacity:hov?.50:.18,transition:'opacity .30s',pointerEvents:'none',zIndex:1}}>
         {t.stamp}
       </div>
-
-      {/* file id */}
       <div style={{position:'relative',zIndex:2,fontFamily:'"Share Tech Mono",monospace',fontSize:'.52rem',letterSpacing:'.16em',color:'rgba(255,255,255,0.20)',marginBottom:14}}>
         {member.file}
       </div>
-
-      {/* avatar initials */}
       <div style={{position:'relative',zIndex:2,width:58,height:58,borderRadius:3,background:'rgba(25,12,14,1)',border:`1px solid ${t.border}`,marginBottom:16,display:'flex',alignItems:'center',justifyContent:'center',boxShadow:`0 0 18px ${t.glow}`,overflow:'hidden'}}>
         <span style={{fontFamily:'"Cinzel",serif',fontWeight:900,fontSize:'1.3rem',color:t.color,textShadow:`0 0 10px ${t.glow}`,letterSpacing:'.04em'}}>
           {member.name.split(' ').map(w=>w[0]).slice(0,2).join('')}
         </span>
       </div>
-
-      {/* name */}
       <div style={{position:'relative',zIndex:2,fontFamily:'"Cinzel",serif',fontWeight:700,fontSize:'1.0rem',letterSpacing:'.06em',color:hov?'#fff':'rgba(255,255,255,0.88)',textShadow:hov?`0 0 14px ${t.glow}`:'none',marginBottom:5,transition:'all .25s',lineHeight:1.2}}>
         {member.name}
       </div>
-
-      {/* role */}
       <div style={{position:'relative',zIndex:2,fontFamily:'"Share Tech Mono",monospace',fontSize:'.65rem',letterSpacing:'.14em',color:t.color,textShadow:`0 0 8px ${t.glow}`,marginBottom:12,textTransform:'uppercase'}}>
         {member.role}
       </div>
-
-      {/* tags */}
       <div style={{position:'relative',zIndex:2,display:'flex',flexWrap:'wrap',gap:5,marginBottom:14}}>
         {member.tags.map(tag=>(
           <span key={tag} style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'.46rem',letterSpacing:'.10em',color:'rgba(255,255,255,0.35)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:2,padding:'2px 6px',background:'rgba(255,255,255,0.02)'}}>
@@ -269,21 +215,15 @@ function DossierCard({ member, index }) {
           </span>
         ))}
       </div>
-
-      {/* bio */}
       <div style={{position:'relative',zIndex:2,fontFamily:'"Share Tech Mono",monospace',fontSize:'.72rem',color:COLORS.textAsh,lineHeight:1.8,marginBottom:20,fontStyle:'italic'}}>
         "{member.bio}"
       </div>
-
-      {/* linkedin */}
       <a href={member.linkedin} target="_blank" rel="noopener noreferrer"
         style={{position:'relative',zIndex:2,display:'inline-flex',alignItems:'center',gap:7,fontFamily:'"Share Tech Mono",monospace',fontSize:'.58rem',letterSpacing:'.10em',color:hov?t.color:'rgba(255,255,255,0.30)',textDecoration:'none',border:`1px solid ${hov?t.border:'rgba(255,255,255,0.10)'}`,borderRadius:3,padding:'5px 12px',background:hov?`rgba(227,18,18,0.08)`:'transparent',transition:'all .20s'}}
       >
         <LinkedInIcon size={12}/>
         LINKEDIN
       </a>
-
-      {/* bottom glow line */}
       <div style={{position:'absolute',bottom:0,left:0,right:0,height:1,background:`linear-gradient(90deg,transparent,${t.color},transparent)`,opacity:hov?.55:.12,transition:'opacity .30s'}}/>
     </div>
   )
@@ -309,6 +249,9 @@ function SectionLabel({ label, sublabel, color }) {
    MAIN TEAM PAGE
 ══════════════════════════════════════════════════════ */
 export default function Team() {
+  // ── FIX #6: useNavigate instead of window.location.assign ──
+  const navigate = useNavigate()
+
   const command = TEAM.filter(m=>m.tier==='command')
   const module  = TEAM.filter(m=>m.tier==='module')
   const field   = TEAM.filter(m=>m.tier==='field')
@@ -318,7 +261,7 @@ export default function Team() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Share+Tech+Mono&display=swap');
         *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; user-select:none; -webkit-user-select:none; }
-        html, body, * { cursor: none !important; }
+        /* ── FIX #15: cursor:none belongs in index.css not here ── */
         a { cursor: none !important; }
         @keyframes cardIn   { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
         @keyframes fadeDown { from{opacity:0;transform:translateY(-14px)} to{opacity:1;transform:translateY(0)} }
@@ -335,22 +278,25 @@ export default function Team() {
         }
       `}</style>
 
-      {/* bg red bottom glow — matches site */}
       <div style={{position:'fixed',inset:0,zIndex:0,background:'radial-gradient(ellipse 90% 60% at 50% 100%, rgba(227,18,18,0.07) 0%, transparent 65%)'}}/>
 
-      <EmberCanvas/>
+      {/* ── FIX #8: shared EmberCanvas with team-page-specific params ── */}
+      <EmberCanvas count={30} vxSpread={0.28} vyMin={0.16} vyRange={0.28}
+                   sizeMin={0.6} sizeRange={1.8} travelMin={0.32} travelRange={0.18}
+                   alphaScale={0.5} zIndex={4} />
       <LightningLayer/>
       <SplashCursor/>
 
-      {/* ── NAVBAR — same as Landing ── */}
+      {/* ── NAVBAR ── */}
       <nav style={{position:'fixed',top:0,width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'30px 50px',zIndex:100,boxSizing:'border-box'}}>
         <div style={{display:'flex',alignItems:'center',gap:12}}>
           <div style={{width:8,height:8,background:COLORS.primaryRed,borderRadius:'50%',boxShadow:`0 0 10px ${COLORS.primaryRed}`,animation:'blink 2s step-start infinite'}}/>
           <span style={{fontFamily:'"Cinzel"',fontSize:'.8rem',color:COLORS.primaryRed,letterSpacing:'.2em'}}>RECURSION HELL</span>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <CornerBtn label="SCOREBOARD" onClick={()=>window.location.assign('/Scoreboard')}/>
-          <CornerBtn label="← BACK"     onClick={()=>window.history.back()}/>
+          {/* ── FIX #6 + #7: navigate() to lowercase route ── */}
+          <CornerBtn label="SCOREBOARD" onClick={() => navigate('/scoreboard')}/>
+          <CornerBtn label="← BACK"     onClick={() => window.history.back()}/>
         </div>
       </nav>
 

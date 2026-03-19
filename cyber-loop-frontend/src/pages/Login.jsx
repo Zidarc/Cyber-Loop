@@ -19,6 +19,9 @@ const T = {
 
 /* ─────────────────────────────────────────
    EMBER CANVAS
+   Note: This version is intentionally separate from the shared EmberCanvas component
+   because it spawns embers at the card edges (needs cardRef) and also renders spore
+   particles — behaviour unique to the login page.
 ───────────────────────────────────────── */
 function EmberCanvas({ cardRef }) {
   const ref = useRef(null)
@@ -67,7 +70,10 @@ function EmberCanvas({ cardRef }) {
     const spores = Array.from({length:35},()=>{ const s=spawnSpore(); s.x=Math.random()*canvas.width; return s })
 
     let rafId, paused=false
-    document.addEventListener('visibilitychange',()=>{ paused=document.hidden })
+
+    // ── FIX #4: named handler so it can be removed in cleanup ──
+    const onVis = () => { paused = document.hidden }
+    document.addEventListener('visibilitychange', onVis)
 
     function draw() {
       rafId=requestAnimationFrame(draw)
@@ -111,7 +117,11 @@ function EmberCanvas({ cardRef }) {
       }
     }
     rafId=requestAnimationFrame(draw)
-    return()=>{ cancelAnimationFrame(rafId); window.removeEventListener('resize',resize) }
+    return () => {
+      cancelAnimationFrame(rafId)
+      window.removeEventListener('resize', resize)
+      document.removeEventListener('visibilitychange', onVis)  // ← leak fixed
+    }
   },[])
   return <canvas ref={ref} style={{position:'fixed',inset:0,width:'100%',height:'100%',zIndex:1,pointerEvents:'none'}}/>
 }
@@ -378,7 +388,8 @@ export default function Login() {
 
       sessionStorage.setItem('token', data.token)
       sessionStorage.setItem('teamName', tn)
-      window.location.assign('/gamepage')
+      // Full page navigation after login is intentional — clears all previous state
+      window.location.assign('/maingamepage')
 
     } catch {
       setError(getErrorMessage(0, null))
@@ -392,7 +403,7 @@ export default function Login() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Share+Tech+Mono&family=Barlow:wght@400;500;600&display=swap');
         *,*::before,*::after { box-sizing:border-box; margin:0; padding:0 }
-        html,body,* { cursor:none!important; user-select:none; -webkit-user-select:none }
+        /* ── FIX #15: global cursor:none lives in index.css, not here ── */
         html,body { overflow:hidden; height:100%; }
         input { user-select:text!important; -webkit-user-select:text!important }
         * { scrollbar-width:none; -ms-overflow-style:none; }
