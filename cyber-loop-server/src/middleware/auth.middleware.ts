@@ -4,7 +4,8 @@ import { authService, hashToken } from '../services/auth.service';
 import type { JwtPayload } from '../services/auth.service';
 import { getCompetitionStatus } from '../services/competition.service';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'Well ofc this isnt the key';
+if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
+const JWT_SECRET = process.env.JWT_SECRET as string;
 
 function extractBearerToken(authHeader: string | undefined): string | null {
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
@@ -14,7 +15,7 @@ function extractBearerToken(authHeader: string | undefined): string | null {
 export async function verifyToken(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> {
   const token = extractBearerToken(req.headers.authorization);
 
@@ -26,7 +27,6 @@ export async function verifyToken(
   try {
     const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
     const tokenHash = hashToken(token);
-
     const row = await authService.getParticipantById(payload.participantId);
     if (!row || row.is_active !== 1) {
       res.status(403).json({ error: 'Account disabled' });

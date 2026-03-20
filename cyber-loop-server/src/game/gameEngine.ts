@@ -88,14 +88,12 @@ export type SubmitWrongResult = {
 
 export type SubmitResult = SubmitCorrectResult | SubmitWrongResult;
 
-// ─────────────────────────────────────────
-// 1. GAME STATE INIT
-// ─────────────────────────────────────────
-export async function getFullGameState(
-  participantId: number
-): Promise<FullGameStateResult> {
-  const timestamp = new Date().toISOString();
 
+// 1. GAME STATE INIT
+export async function getFullGameState(
+  participantId: number,
+): Promise<FullGameStateResult> {
+  //1. Load
   let { data: gsRow, error: gsErr } = await supabase
     .from('participant_game_state')
     .select('*')
@@ -105,6 +103,8 @@ export async function getFullGameState(
   if (gsErr) throw new Error('Failed to load game state');
 
   if (!gsRow) {
+    const timestamp = new Date().toISOString();
+
     const { data: newGs, error: createErr } = await supabase
       .from('participant_game_state')
       .upsert(
@@ -123,78 +123,74 @@ export async function getFullGameState(
           finished_at: null,
           updated_at: timestamp,
         },
-        { onConflict: 'participant_id' }
+        { onConflict: 'participant_id' },
       )
       .select('*')
       .single();
 
     if (createErr) throw new Error('Failed to create game state');
     gsRow = newGs;
-  }
 
-  const { data: startNodeData } = await supabase
-    .from('nodes')
-    .select('id')
-    .eq('node_type', 'start')
-    .maybeSingle();
-
-  const startNodeId = (startNodeData as { id: number } | null)?.id;
-
-  if (startNodeId != null) {
-    const { data: startProgress } = await supabase
-      .from('participant_node_progress')
-      .select('status')
-      .eq('participant_id', participantId)
-      .eq('node_id', startNodeId)
+    // Seed the start node as 'unlocked' for this participant.
+    const { data: startNodeData } = await supabase
+      .from('nodes')
+      .select('id')
+      .eq('node_type', 'start')
       .maybeSingle();
 
-    if (!startProgress) {
-      await supabase.from('participant_node_progress').insert({
-        participant_id: participantId,
-        node_id: startNodeId,
-        status: 'unlocked',
-        unlocked_at: timestamp,
-        solved_at: null,
-      });
+    const startNodeId = (startNodeData as { id: number } | null)?.id;
+    if (startNodeId != null) {
+      await supabase
+        .from('participant_node_progress')
+        .upsert(
+          {
+            participant_id: participantId,
+            node_id: startNodeId,
+            status: 'unlocked',
+            unlocked_at: timestamp,
+            solved_at: null,
+          },
+          { onConflict: 'participant_id,node_id', ignoreDuplicates: true },
+        );
     }
   }
 
-  const { data: nodeRows, error: nodesErr } = await supabase
-    .from('nodes')
-    .select('id, label, node_type, is_visible');
+  //2. Parallel: all nodes + this participant's progress
+  const [nodesResult, progressResult] = await Promise.all([
+    supabase.from('nodes').select('id, label, node_type, is_visible'),
+    supabase
+      .from('participant_node_progress')
+      .select('node_id, status, unlocked_at, solved_at')
+      .eq('participant_id', participantId),
+  ]);
 
-  if (nodesErr || !nodeRows) throw new Error('Failed to load nodes');
+  if (nodesResult.error || !nodesResult.data) throw new Error('Failed to load nodes');
+  if (progressResult.error)                    throw new Error('Failed to load node progress');
 
-  const { data: progressRows, error: progressErr } = await supabase
-    .from('participant_node_progress')
-    .select('node_id, status, unlocked_at, solved_at')
-    .eq('participant_id', participantId);
-
-  if (progressErr) throw new Error('Failed to load node progress');
-
+  //3. Build response
   const progressByNode = new Map<number, NodeProgressRow>();
-  for (const p of (progressRows || []) as NodeProgressRow[]) {
+  for (const p of (progressResult.data || []) as NodeProgressRow[]) {
     progressByNode.set(p.node_id, p);
   }
 
-  const nodes: NodeWithStatus[] = (nodeRows as NodeRow[]).map((n) => {
-    const progress = progressByNode.get(n.id);
-    const status = progress ? progress.status : ('locked' as const);
+  const nodes: NodeWithStatus[] = (nodesResult.data as NodeRow[]).map((n) => {
+    const progress  = progressByNode.get(n.id);
+    const status    = progress ? progress.status : ('locked' as const);
     const isPenalty = n.node_type === 'penalty';
 
-    // Penalty nodes: visible only when this participant has unlocked/solved them.
+    // Penalty nodes are visible only when this participant has unlocked or solved them.
     const isVisible = isPenalty
       ? status === 'unlocked' || status === 'solved'
       : Boolean(n.is_visible);
 
     return {
-      id: n.id,
-      label: n.label,
-      nodeType: n.node_type,
+      id:         n.id,
+      label:      n.label,
+      nodeType:   n.node_type,
       isVisible,
       status,
       unlockedAt: progress?.unlocked_at ?? null,
-      solvedAt: progress?.solved_at ?? null,
+      solvedAt:   progress?.solved_at   ?? null,
     };
   });
 
@@ -203,67 +199,48 @@ export async function getFullGameState(
   return {
     nodes,
     gameState: {
-      totalCorrect: gs.total_correct,
-      totalMistakes: gs.total_mistakes,
-      score: gs.score,
-      lastCheckpointId: gs.last_checkpoint_id,
-      lastQuestionId: gs.last_question_id,
+      totalCorrect:         gs.total_correct,
+      totalMistakes:        gs.total_mistakes,
+      score:                gs.score,
+      lastCheckpointId:     gs.last_checkpoint_id,
+      lastQuestionId:       gs.last_question_id,
       penaltyNodesUnlocked: gs.penalty_nodes_unlocked,
-      penaltyCounter: gs.penalty_counter ?? 0,
-      isFinished: Boolean(gs.is_finished),
-      startedAt: gs.started_at,
-      finishedAt: gs.finished_at,
+      penaltyCounter:       gs.penalty_counter ?? 0,
+      isFinished:           Boolean(gs.is_finished),
+      startedAt:            gs.started_at,
+      finishedAt:           gs.finished_at,
     },
   };
 }
 
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // 2. GET QUESTION FOR A NODE
-// ─────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 //
-// POOL ELIGIBILITY RULES (applied in this order):
+// POOL ELIGIBILITY RULES:
 //
 //  [A] Currently active assignment — excluded
 //      A question already assigned to one of this participant's unlocked nodes
 //      cannot be assigned to another node simultaneously.
-//      Since assignments are deleted on solve AND on wrong answer, this set
-//      only ever contains truly in-progress assignments.
 //
 //  [B] Immediate-repeat block — excluded for exactly ONE draw
 //      last_question_id = the last question seen, correct OR wrong.
-//      Updated after EVERY submission (not just correct ones).
 //      Prevents the same question from appearing twice in a row.
-//      After one fresh question is drawn, the previously blocked question
-//      is eligible again.
 //
 //  [C] Post-checkpoint permanent exclusion
 //      Once a checkpoint is passed (lastCheckpointId != null), questions
 //      correctly answered at nodes that are STILL solved are permanently
 //      excluded from the pool for this participant.
-//
 //      Source: question_attempts WHERE is_correct = 1, filtered to currently
 //      solved node IDs.
 //
-//      WHY question_attempts and NOT participant_question_assignment:
-//      handleCorrectAnswer deletes the assignment row the moment a node is
-//      solved. So participant_question_assignment has ZERO rows for solved
-//      nodes — joining against it always produces an empty set, meaning the
-//      post-checkpoint exclusion never fired in the original code.
-//      question_attempts is an append-only audit log; entries are never
-//      deleted, so it reliably tracks what was correctly answered where.
-//
 //  [D] Pre-checkpoint re-entry
-//      If lastCheckpointId is null, rule [C] never runs — the entire pool
-//      minus [A] and [B] is eligible. When a wrong answer locks pre-checkpoint
-//      nodes, those nodes become 'locked' (not 'solved'), so their questions
-//      don't appear in solvedNodeIds and naturally re-enter the pool.
-//
-// ─────────────────────────────────────────
+//      If lastCheckpointId is null, rule [C] never runs.
 export async function getNextQuestion(
   nodeId: number,
-  participantId: number
+  participantId: number,
 ): Promise<PublicQuestion> {
-  // node must be unlocked
+  //Node must be unlocked
   const { data: progressRow } = await supabase
     .from('participant_node_progress')
     .select('status')
@@ -272,9 +249,10 @@ export async function getNextQuestion(
     .maybeSingle();
 
   const nodeStatus = (progressRow as { status: string } | null)?.status;
-  if (!nodeStatus || nodeStatus === 'locked') throw new Error('Node is locked');
-  if (nodeStatus === 'solved') throw new Error('Node is already solved');
+  if (!nodeStatus || nodeStatus === 'locked')  throw new Error('Node is locked');
+  if (nodeStatus === 'solved')                 throw new Error('Node is already solved');
 
+  //Return existing assignment if present
   const { data: existingAssignment } = await supabase
     .from('participant_question_assignment')
     .select('question_id')
@@ -293,16 +271,17 @@ export async function getNextQuestion(
     return q as PublicQuestion;
   }
 
+  //Determine pool type
   const { data: nodeData } = await supabase
     .from('nodes')
     .select('node_type')
     .eq('id', nodeId)
     .maybeSingle();
 
-  const nodeType = (nodeData as { node_type: NodeType } | null)?.node_type;
+  const nodeType  = (nodeData as { node_type: NodeType } | null)?.node_type;
   if (!nodeType) throw new Error('Node not found');
 
-  const isPenalty = nodeType === 'penalty';
+  const isPenalty               = nodeType === 'penalty';
   const poolType: 'main' | 'penalty' = isPenalty ? 'penalty' : 'main';
 
   const { data: gsRow } = await supabase
@@ -311,31 +290,20 @@ export async function getNextQuestion(
     .eq('participant_id', participantId)
     .maybeSingle();
 
-  const lastQuestionId =
-    (gsRow as { last_question_id: number | null } | null)?.last_question_id;
-  const lastCheckpointId =
-    (gsRow as { last_checkpoint_id: number | null } | null)?.last_checkpoint_id;
+  const lastQuestionId  = (gsRow as { last_question_id:  number | null } | null)?.last_question_id;
+  const lastCheckpointId = (gsRow as { last_checkpoint_id: number | null } | null)?.last_checkpoint_id;
 
-  const { data: poolQuestions } = await supabase
-    .from('questions')
-    .select('*')
-    .eq('pool_type', poolType);
-
-  if (!poolQuestions || poolQuestions.length === 0) {
-    throw new Error('Question pool exhausted');
-  }
-
-  // ── Rule [A]: currently active assignments ─────────────────────────────────
+  //Rule [A]: currently active assignments (IDs to exclude)
   const { data: allAssignments } = await supabase
     .from('participant_question_assignment')
     .select('question_id')
     .eq('participant_id', participantId);
 
   const assignedIds = new Set(
-    ((allAssignments || []) as { question_id: number }[]).map((r) => r.question_id)
+    ((allAssignments || []) as { question_id: number }[]).map((r) => r.question_id),
   );
 
-  // ── Rule [C]: post-checkpoint permanent exclusion ──────────────────────────
+  //Rule [C]: post-checkpoint permanently excluded question IDs
   let solvedQuestionIds = new Set<number>();
 
   if (!isPenalty && lastCheckpointId != null) {
@@ -350,223 +318,219 @@ export async function getNextQuestion(
 
       const { data: correctAttempts } = await supabase
         .from('question_attempts')
-        .select('question_id')
+        .select('question_id, node_id, attempted_at')
         .eq('participant_id', participantId)
         .eq('is_correct', 1)
-        .in('node_id', solvedNodeIds);
+        .in('node_id', solvedNodeIds)
+        .order('attempted_at', { ascending: false });  // newest first
 
-      solvedQuestionIds = new Set(
-        ((correctAttempts || []) as { question_id: number }[]).map((r) => r.question_id)
-      );
+      // Keep only the most recent correct answer per node.
+      const latestPerNode = new Map<number, number>(); // node_id → question_id
+      for (const attempt of (correctAttempts || []) as {
+        question_id: number;
+        node_id:     number;
+        attempted_at: string;
+      }[]) {
+        if (!latestPerNode.has(attempt.node_id)) {
+          latestPerNode.set(attempt.node_id, attempt.question_id);
+        }
+      }
+
+      solvedQuestionIds = new Set(latestPerNode.values());
     }
   }
 
-  // ── Apply all eligibility rules ────────────────────────────────────────────
-  const eligible = (poolQuestions as QuestionRow[]).filter((q) => {
-    if (assignedIds.has(q.id)) return false;                                          // [A]
-    if (lastQuestionId != null && q.id === lastQuestionId) return false;              // [B]
-    if (!isPenalty && lastCheckpointId != null && solvedQuestionIds.has(q.id))        // [C]
-      return false;
-    return true;
-  });
+  // Rule [C] exclusion is applied as a second NOT IN if the set is non-empty.
+  const abExcluded: number[] = [...assignedIds];
+  if (lastQuestionId != null) abExcluded.push(lastQuestionId);
+  let query = supabase
+    .from('questions')
+    .select('id, node_id, pool_type, question_type, question_text, file_path, difficulty')
+    .eq('pool_type', poolType);
 
-  if (eligible.length === 0) throw new Error('Question pool exhausted');
+  if (abExcluded.length > 0) {
+    query = query.not('id', 'in', `(${abExcluded.join(',')})`) as typeof query;
+  }
+  if (solvedQuestionIds.size > 0) {
+    query = query.not('id', 'in', `(${[...solvedQuestionIds].join(',')})`) as typeof query;
+  }
 
-  const chosen = eligible[Math.floor(Math.random() * eligible.length)];
+  const { data: eligible } = await query;
 
-  await supabase.from('participant_question_assignment').insert({
-    participant_id: participantId,
-    node_id: nodeId,
-    question_id: chosen.id,
-  });
+  if (!eligible || eligible.length === 0) throw new Error('Question pool exhausted');
 
-  await supabase
+  const chosen = (eligible as PublicQuestion[])[Math.floor(Math.random() * eligible.length)];
+
+  const { error: insertErr } = await supabase
+    .from('participant_question_assignment')
+    .insert({
+      participant_id: participantId,
+      node_id:        nodeId,
+      question_id:    chosen.id,
+    });
+
+  let finalQuestion = chosen;
+
+  if (insertErr) {
+    const { data: existing } = await supabase
+      .from('participant_question_assignment')
+      .select('question_id')
+      .eq('participant_id', participantId)
+      .eq('node_id', nodeId)
+      .maybeSingle();
+
+    if (!existing) throw new Error('Assignment conflict and re-fetch failed');
+
+    const existingQId = (existing as { question_id: number }).question_id;
+    const { data: existingQ } = await supabase
+      .from('questions')
+      .select('id, node_id, pool_type, question_type, question_text, file_path, difficulty')
+      .eq('id', existingQId)
+      .maybeSingle();
+
+    if (!existingQ) throw new Error('Conflicting assignment question not found');
+    finalQuestion = existingQ as PublicQuestion;
+  }
+
+  supabase
     .from('participant_game_state')
     .upsert(
-      { participant_id: participantId, current_node_id: nodeId, current_question_id: chosen.id },
-      { onConflict: 'participant_id' }
-    );
+      {
+        participant_id:      participantId,
+        current_node_id:     nodeId,
+        current_question_id: finalQuestion.id,
+      },
+      { onConflict: 'participant_id' },
+    )
+    .then(({ error }) => {
+      if (error) console.error('getNextQuestion: game state update failed:', error.message);
+    });
 
-  const { answer: _answer, ...publicQuestion } = chosen;
-  return publicQuestion;
+  return finalQuestion;
 }
 
-// ─────────────────────────────────────────
 // 3. SUBMIT ANSWER
-// ─────────────────────────────────────────
 export async function submitAnswer(
   participantId: number,
   questionId: number,
-  answer: string
+  answer: string,
 ): Promise<SubmitResult> {
   const qId = Number(questionId);
   if (!Number.isInteger(qId) || qId < 1) throw new Error('Invalid question id');
 
-  const { data: question, error: qErr } = await supabase
-    .from('questions')
-    .select('*')
-    .eq('id', qId)
-    .maybeSingle();
+  //Parallel: fetch question + assignment
+  const [questionResult, assignmentResult] = await Promise.all([
+    supabase
+      .from('questions')
+      .select('id, node_id, pool_type, question_type, question_text, file_path, answer, difficulty')
+      .eq('id', qId)
+      .maybeSingle(),
+    supabase
+      .from('participant_question_assignment')
+      .select('node_id')
+      .eq('participant_id', participantId)
+      .eq('question_id', qId)
+      .maybeSingle(),
+  ]);
 
-  if (qErr || !question) throw new Error('Question not found');
-  const questionRow = question as QuestionRow;
+  if (questionResult.error || !questionResult.data) throw new Error('Question not found');
+  const questionRow = questionResult.data as QuestionRow;
 
-  const { data: assignmentRow } = await supabase
-    .from('participant_question_assignment')
-    .select('node_id')
-    .eq('participant_id', participantId)
-    .eq('question_id', qId)
-    .maybeSingle();
-
-  const gameNodeId = (assignmentRow as { node_id: number } | null)?.node_id;
+  const gameNodeId = (assignmentResult.data as { node_id: number } | null)?.node_id;
   if (!gameNodeId) throw new Error('Question not assigned to participant');
 
-  const { data: progressRow } = await supabase
-    .from('participant_node_progress')
-    .select('status')
-    .eq('participant_id', participantId)
-    .eq('node_id', gameNodeId)
-    .maybeSingle();
+  const [progressResult, gsResult, nodeTypeResult] = await Promise.all([
+    supabase
+      .from('participant_node_progress')
+      .select('status')
+      .eq('participant_id', participantId)
+      .eq('node_id', gameNodeId)
+      .maybeSingle(),
+    supabase
+      .from('participant_game_state')
+      .select('*')
+      .eq('participant_id', participantId)
+      .maybeSingle(),
+    supabase
+      .from('nodes')
+      .select('node_type')
+      .eq('id', gameNodeId)
+      .maybeSingle(),
+  ]);
 
-  const nodeStatus = (progressRow as { status: string } | null)?.status;
+  if (progressResult.error) throw new Error('Failed to load node progress');
+  if (gsResult.error)        throw new Error('Failed to load game state');
+
+  const nodeStatus = (progressResult.data as { status: string } | null)?.status;
   if (nodeStatus !== 'unlocked') throw new Error('Node not unlocked for participant');
 
-  const { data: gsRow, error: gsErr } = await supabase
-    .from('participant_game_state')
-    .select('*')
-    .eq('participant_id', participantId)
-    .maybeSingle();
-
-  if (gsErr) throw new Error('Failed to load game state');
+  const currentNodeType = (nodeTypeResult.data as { node_type: NodeType } | null)?.node_type;
+  if (!currentNodeType) throw new Error('Node not found');
 
   const timestamp = new Date().toISOString();
-  const gameState = (gsRow ?? {
-    participant_id: participantId,
-    total_correct: 0,
-    total_mistakes: 0,
-    score: 0,
-    penalty_counter: 0,
-    last_checkpoint_id: null,
-    current_node_id: null,
-    current_question_id: null,
-    last_question_id: null,
+  const gameState = (gsResult.data ?? {
+    participant_id:         participantId,
+    total_correct:          0,
+    total_mistakes:         0,
+    score:                  0,
+    penalty_counter:        0,
+    last_checkpoint_id:     null,
+    current_node_id:        null,
+    current_question_id:    null,
+    last_question_id:       null,
     penalty_nodes_unlocked: 0,
-    is_finished: 0,
-    started_at: timestamp,
-    finished_at: null,
-    updated_at: timestamp,
+    is_finished:            0,
+    started_at:             timestamp,
+    finished_at:            null,
+    updated_at:             timestamp,
   }) as GameStateRow;
 
+  //Compare answer
   const normalizedSubmitted = String(answer ?? '').trim().toLowerCase();
-  const normalizedCorrect = String(questionRow.answer ?? '').trim().toLowerCase();
-  const isCorrect = normalizedSubmitted === normalizedCorrect;
-
-  // Append-only attempt log, this is what Rule [C] reads from
-  await supabase.from('question_attempts').insert({
-    participant_id: participantId,
-    question_id: qId,
-    node_id: gameNodeId,
-    is_correct: isCorrect ? 1 : 0,
-    attempted_at: timestamp,
-  });
-
-  let result: SubmitResult;
-  let updatedState: GameStateRow;
+  const normalizedCorrect   = String(questionRow.answer ?? '').trim().toLowerCase();
+  const isCorrect           = normalizedSubmitted === normalizedCorrect;
 
   if (isCorrect) {
-    const { state, submitResult } = await handleCorrectAnswer(
-      participantId, questionRow, gameState, timestamp, gameNodeId
+    return handleCorrectAnswer(
+      participantId, questionRow, gameState, timestamp, gameNodeId, currentNodeType,
     );
-    updatedState = state;
-    result = submitResult;
   } else {
-    const { state, submitResult } = await handleWrongAnswer(
-      participantId, questionRow, gameState, timestamp, gameNodeId
+    return handleWrongAnswer(
+      participantId, questionRow, gameState, timestamp, gameNodeId, currentNodeType,
     );
-    updatedState = state;
-    result = submitResult;
   }
-
-  const newScore = await computeScore(participantId, updatedState.penalty_counter);
-
-  await supabase
-    .from('participant_game_state')
-    .upsert(
-      {
-        participant_id: participantId,
-        total_correct: updatedState.total_correct,
-        total_mistakes: updatedState.total_mistakes,
-        score: newScore,
-        last_checkpoint_id: updatedState.last_checkpoint_id,
-        current_node_id: updatedState.current_node_id,
-        current_question_id: qId,
-
-        // ── Rule [B]: always write the last SEEN question id ────────────────
-        last_question_id: qId,
-
-        penalty_nodes_unlocked: updatedState.penalty_nodes_unlocked,
-        is_finished: updatedState.is_finished,
-        finished_at: updatedState.finished_at,
-        updated_at: timestamp,
-        penalty_counter: updatedState.penalty_counter,
-      },
-      { onConflict: 'participant_id' }
-    );
-
-  return result;
 }
 
-// ─────────────────────────────────────────
 // INTERNAL: CORRECT ANSWER HANDLER
-// ─────────────────────────────────────────
+// Reads all the information the RPC needs, computes in-memory state changes,
+// then makes ONE atomic call to finalize_correct_answer.
 async function handleCorrectAnswer(
   participantId: number,
   question: QuestionRow,
   gameState: GameStateRow,
   timestamp: string,
-  gameNodeId: number
-): Promise<{ state: GameStateRow; submitResult: SubmitCorrectResult }> {
-  const { data: currentNodeData } = await supabase
-    .from('nodes')
-    .select('node_type')
-    .eq('id', gameNodeId)
-    .maybeSingle();
-
-  const currentNodeType = (currentNodeData as { node_type: NodeType } | null)?.node_type;
-
-  await supabase
-    .from('participant_node_progress')
-    .upsert(
-      {
-        participant_id: participantId,
-        node_id: gameNodeId,
-        status: 'solved',
-        solved_at: timestamp,
-      },
-      { onConflict: 'participant_id,node_id' }
-    );
-
+  gameNodeId: number,
+  currentNodeType: NodeType,
+): Promise<SubmitCorrectResult> {
+  //Build in-memory state (mirrors what the RPC will persist)
   const updated: GameStateRow = {
     ...gameState,
-    total_correct: gameState.total_correct + 1,
+    total_correct:    gameState.total_correct + 1,
     last_question_id: question.id,
-    current_node_id: gameNodeId,
+    current_node_id:  gameNodeId,
   };
 
   if (currentNodeType === 'penalty') {
     updated.penalty_counter = Math.max(0, (gameState.penalty_counter ?? 0) - 1);
   }
-
   if (currentNodeType === 'start' || currentNodeType === 'checkpoint') {
     updated.last_checkpoint_id = gameNodeId;
   }
 
-  // ── Final node ──────────────────────────────────────────────────────────────
+  //Final node: mark finished, write leaderboard snapshot
   if (currentNodeType === 'final') {
     updated.is_finished = 1;
     updated.finished_at = timestamp;
-
-    const finalScore = await computeScore(participantId, updated.penalty_counter);
 
     const { data: participant } = await supabase
       .from('participants')
@@ -576,213 +540,223 @@ async function handleCorrectAnswer(
 
     const teamName = (participant as { team_name: string } | null)?.team_name ?? 'Unknown';
 
-    const { count: solvedCount } = await supabase
-      .from('participant_node_progress')
-      .select('node_id', { count: 'exact', head: true })
-      .eq('participant_id', participantId)
-      .eq('status', 'solved');
+    const { error: rpcErr } = await supabase.rpc('finalize_correct_answer', {
+      p_participant_id:        participantId,
+      p_node_id:               gameNodeId,
+      p_question_id:           question.id,
+      p_node_type:             currentNodeType,
+      p_ts:                    timestamp,
+      p_total_correct:         updated.total_correct,
+      p_total_mistakes:        updated.total_mistakes,
+      p_last_checkpoint_id:    updated.last_checkpoint_id ?? null,
+      p_penalty_counter:       updated.penalty_counter,
+      p_penalty_nodes_unlocked: updated.penalty_nodes_unlocked,
+      p_is_finished:           1,
+      p_finished_at:           timestamp,
+      p_unlock_node_id:        null,
+      p_leaderboard_team_name: teamName,
+      p_last_question_id:      question.id,
+    });
 
-    await supabase.from('leaderboard').upsert(
-      {
-        participant_id: participantId,
-        team_name: teamName,
-        score: finalScore,
-        total_correct: updated.total_correct,
-        total_mistakes: updated.total_mistakes,
-        penalty_counter: updated.penalty_counter,
-        puzzles_solved: solvedCount ?? 0,
-        finished_at: timestamp,
-      },
-      { onConflict: 'participant_id' }
-    );
-
-    await supabase
-      .from('participant_question_assignment')
-      .delete()
-      .eq('participant_id', participantId)
-      .eq('node_id', gameNodeId);
-
-    return {
-      state: updated,
-      submitResult: { correct: true, nextNodeId: null, isFinished: true },
-    };
+    if (rpcErr) throw new Error(`finalize_correct_answer (final) failed: ${rpcErr.message}`);
+    return { correct: true, nextNodeId: null, isFinished: true };
   }
 
+  //Non-final node: determine which node to unlock next
+  let nextNodeId:   number | null = null;
+  let unlockNodeId: number | null = null;
 
-  const { data: edges } = await supabase
-    .from('node_edges')
-    .select('to_node')
-    .eq('from_node', gameNodeId);
+  //Helper: check whether Final should be unlocked right now
+  // Returns the Final node's id if it should be unlocked, null otherwise.
+  async function checkFinalUnlock(beingSolvedNow: number): Promise<number | null> {
+    if ((updated.penalty_counter ?? 0) !== 0) return null;
 
-  let nextNodeId: number | null = null;
-
-  for (const e of (edges || []) as { to_node: number }[]) {
-    const { data: nextNodeData } = await supabase
+    const { data: finalNodeData } = await supabase
       .from('nodes')
-      .select('id, node_type')
-      .eq('id', e.to_node)
+      .select('id')
+      .eq('node_type', 'final')
       .maybeSingle();
 
-    const nextNode = nextNodeData as { id: number; node_type: NodeType } | null;
-    if (!nextNode) continue;
-    if (nextNode.node_type === 'penalty') continue;
+    const finalNodeId = (finalNodeData as { id: number } | null)?.id ?? null;
+    if (finalNodeId === null) return null;
 
-    nextNodeId = nextNode.id;
+    // Fetch direct predecessors of Final from the edge table
+    const { data: incomingEdges } = await supabase
+      .from('node_edges')
+      .select('from_node')
+      .eq('to_node', finalNodeId);
 
-    if (nextNode.node_type === 'final') {
-      const { data: allProgress } = await supabase
-        .from('participant_node_progress')
-        .select('node_id, status')
-        .eq('participant_id', participantId);
+    const predecessorIds = ((incomingEdges || []) as { from_node: number }[]).map(
+      (e) => e.from_node,
+    );
 
-      const progressList = (allProgress || []) as { node_id: number; status: string }[];
+    if (predecessorIds.length === 0) return null;
 
-      const allSolved = progressList
-        .filter((p) => p.node_id !== nextNode.id)
-        .every((p) => p.status === 'solved');
+    // Check every predecessor is solved (or is the node being solved right now)
+    const { data: predProgress } = await supabase
+      .from('participant_node_progress')
+      .select('node_id, status')
+      .eq('participant_id', participantId)
+      .in('node_id', predecessorIds);
 
-      if (allSolved) {
-        await supabase
-          .from('participant_node_progress')
-          .upsert(
-            {
-              participant_id: participantId,
-              node_id: nextNode.id,
-              status: 'unlocked',
-              unlocked_at: timestamp,
-            },
-            { onConflict: 'participant_id,node_id' }
-          );
+    const progressMap = new Map(
+      ((predProgress || []) as { node_id: number; status: string }[]).map(
+        (p) => [p.node_id, p.status],
+      ),
+    );
+
+    const allPredecessorsSolved = predecessorIds.every(
+      (id) => progressMap.get(id) === 'solved' || id === beingSolvedNow,
+    );
+
+    return allPredecessorsSolved ? finalNodeId : null;
+  }
+
+  if (currentNodeType === 'penalty') {
+    // Penalty nodes have no edges — the only thing they can trigger is the
+    // Final unlock when penalty_counter drops to 0.
+    const finalId = await checkFinalUnlock(gameNodeId);
+    if (finalId !== null) {
+      nextNodeId   = finalId;
+      unlockNodeId = finalId;
+    }
+  } else {
+    const { data: edges } = await supabase
+      .from('node_edges')
+      .select('to_node')
+      .eq('from_node', gameNodeId);
+
+    const edgeTargetIds = ((edges || []) as { to_node: number }[]).map((e) => e.to_node);
+
+    if (edgeTargetIds.length > 0) {
+      const { data: nextNodes } = await supabase
+        .from('nodes')
+        .select('id, node_type')
+        .in('id', edgeTargetIds);
+
+      for (const nextNode of (nextNodes || []) as { id: number; node_type: NodeType }[]) {
+        if (nextNode.node_type === 'penalty') continue;
+
+        nextNodeId = nextNode.id;
+
+        if (nextNode.node_type === 'final') {
+          const finalId = await checkFinalUnlock(gameNodeId);
+          if (finalId !== null) {
+            unlockNodeId = finalId;
+          }
+        } else {
+          unlockNodeId = nextNode.id;
+        }
       }
-    } else {
-      await supabase
-        .from('participant_node_progress')
-        .upsert(
-          {
-            participant_id: participantId,
-            node_id: nextNode.id,
-            status: 'unlocked',
-            unlocked_at: timestamp,
-          },
-          { onConflict: 'participant_id,node_id' }
-        );
     }
   }
 
-  await supabase
-    .from('participant_question_assignment')
-    .delete()
-    .eq('participant_id', participantId)
-    .eq('node_id', gameNodeId);
+  const { error: rpcErr } = await supabase.rpc('finalize_correct_answer', {
+    p_participant_id:         participantId,
+    p_node_id:                gameNodeId,
+    p_question_id:            question.id,
+    p_node_type:              currentNodeType,
+    p_ts:                     timestamp,
+    p_total_correct:          updated.total_correct,
+    p_total_mistakes:         updated.total_mistakes,
+    p_last_checkpoint_id:     updated.last_checkpoint_id ?? null,
+    p_penalty_counter:        updated.penalty_counter,
+    p_penalty_nodes_unlocked: updated.penalty_nodes_unlocked,
+    p_is_finished:            0,
+    p_finished_at:            null,
+    p_unlock_node_id:         unlockNodeId,
+    p_leaderboard_team_name:  null,
+    p_last_question_id:       question.id,
+  });
 
-  return {
-    state: updated,
-    submitResult: { correct: true, nextNodeId, isFinished: false },
-  };
+  if (rpcErr) throw new Error(`finalize_correct_answer failed: ${rpcErr.message}`);
+  return { correct: true, nextNodeId, isFinished: false };
 }
 
-// ─────────────────────────────────────────
-// INTERNAL: WRONG ANSWER HANDLER
-// ─────────────────────────────────────────
+
 async function handleWrongAnswer(
   participantId: number,
   question: QuestionRow,
   gameState: GameStateRow,
   timestamp: string,
-  gameNodeId: number
-): Promise<{ state: GameStateRow; submitResult: SubmitWrongResult }> {
-  const { data: currentNodeData } = await supabase
-    .from('nodes')
-    .select('node_type')
-    .eq('id', gameNodeId)
-    .maybeSingle();
+  gameNodeId: number,
+  currentNodeType: NodeType,
+): Promise<SubmitWrongResult> {
+  const totalMistakesUpdated = gameState.total_mistakes + 1;
 
-  const currentNodeType = (currentNodeData as { node_type: NodeType } | null)?.node_type;
-
-  // penalty_counter only increments on main-node wrong answers, NOT penalty-node wrong answers
-  const updated: GameStateRow = {
-    ...gameState,
-    total_mistakes: gameState.total_mistakes + 1,
-    penalty_counter: currentNodeType === 'penalty'
-      ? (gameState.penalty_counter ?? 0)
-      : (gameState.penalty_counter ?? 0) + 1,
-  };
-
-  // ── Penalty node wrong answer ────────────────────────────────────────────────
+  // Penalty node wrong answer — simple path
+  // Stays on the penalty node. penalty_counter does NOT increment on penalty
+  // node mistakes — only main-node mistakes create penalty debt.
   if (currentNodeType === 'penalty') {
-    await supabase
-      .from('participant_question_assignment')
-      .delete()
-      .eq('participant_id', participantId)
-      .eq('node_id', gameNodeId);
+    const { error: rpcErr } = await supabase.rpc('finalize_wrong_answer', {
+      p_participant_id:         participantId,
+      p_node_id:                gameNodeId,
+      p_question_id:            question.id,
+      p_ts:                     timestamp,
+      p_penalty_node_to_unlock: null,
+      p_reset_target_id:        gameNodeId,
+      p_nodes_to_lock:          [],
+      p_total_correct:          gameState.total_correct,
+      p_total_mistakes:         totalMistakesUpdated,
+      p_last_checkpoint_id:     gameState.last_checkpoint_id ?? null,
+      p_penalty_counter:        gameState.penalty_counter ?? 0,
+      p_penalty_nodes_unlocked: gameState.penalty_nodes_unlocked,
+      p_current_node_id:        gameNodeId,
+    });
 
-    updated.current_node_id = gameNodeId;
-
-    return {
-      state: updated,
-      submitResult: {
-        correct: false,
-        penaltyNodeUnlocked: null,
-        sentBackToNodeId: gameNodeId,
-      },
-    };
+    if (rpcErr) throw new Error(`finalize_wrong_answer (penalty) failed: ${rpcErr.message}`);
+    return { correct: false, penaltyNodeUnlocked: null, sentBackToNodeId: gameNodeId };
   }
 
-
-  // ── Main node wrong answer ──────────────────────────────────────────────────
-
-  // Unlock the next sequential penalty node
-  let penaltyNodeUnlocked: number | null = null;
-
+  //Main node wrong answer
   const { data: allPenaltyNodes } = await supabase
     .from('nodes')
     .select('id')
     .eq('node_type', 'penalty')
     .order('id', { ascending: true });
+  const penaltyIds = ((allPenaltyNodes || []) as { id: number }[]).map((n) => n.id);
 
-  if (allPenaltyNodes && allPenaltyNodes.length > 0) {
-    const penaltyIds = (allPenaltyNodes as { id: number }[]).map((n) => n.id);
+  let penaltyNodeUnlocked: number | null = null;
+  let penaltyNodesUnlockedUpdated = gameState.penalty_nodes_unlocked;
 
+  if (penaltyIds.length > 0) {
     const { data: existingPenaltyProgress } = await supabase
       .from('participant_node_progress')
       .select('node_id, status')
       .eq('participant_id', participantId)
       .in('node_id', penaltyIds);
 
-    const alreadyActivePenaltyIds = new Set(
+    // Only treat currently UNLOCKED (not yet solved) penalty nodes as "active".
+    // Solved penalty nodes have already discharged their debt and their slot is
+    // considered free — but since solving them already decremented the counter,
+    // we don't re-unlock them. We just don't count them as blocking a new slot.
+    const currentlyUnlockedPenaltyIds = new Set(
       ((existingPenaltyProgress || []) as { node_id: number; status: string }[])
-        .filter((p) => p.status === 'unlocked' || p.status === 'solved')
-        .map((p) => p.node_id)
+        .filter((p) => p.status === 'unlocked')
+        .map((p) => p.node_id),
     );
 
-    const nextPenalty = (allPenaltyNodes as { id: number }[]).find(
-      (n) => !alreadyActivePenaltyIds.has(n.id)
+    const nextPenalty = ((allPenaltyNodes || []) as { id: number }[]).find(
+      (n) => !currentlyUnlockedPenaltyIds.has(n.id),
     );
 
     if (nextPenalty) {
-      await supabase
-        .from('participant_node_progress')
-        .upsert(
-          {
-            participant_id: participantId,
-            node_id: nextPenalty.id,
-            status: 'unlocked',
-            unlocked_at: timestamp,
-          },
-          { onConflict: 'participant_id,node_id' }
-        );
-      updated.penalty_nodes_unlocked = updated.penalty_nodes_unlocked + 1;
-      penaltyNodeUnlocked = nextPenalty.id;
+      penaltyNodeUnlocked       = nextPenalty.id;
+      penaltyNodesUnlockedUpdated += 1;
     }
   }
 
-  // Determine reset target
+  const penaltyCounterUpdated = penaltyNodeUnlocked !== null
+    ? (gameState.penalty_counter ?? 0) + 1
+    : (gameState.penalty_counter ?? 0);
+
+  //Determine reset target
   let resetTargetId: number;
 
   if (currentNodeType === 'start') {
     resetTargetId = gameNodeId;
-  } else if (updated.last_checkpoint_id != null) {
-    resetTargetId = updated.last_checkpoint_id;
+  } else if (gameState.last_checkpoint_id != null) {
+    resetTargetId = gameState.last_checkpoint_id;
   } else {
     const { data: startNode } = await supabase
       .from('nodes')
@@ -792,101 +766,93 @@ async function handleWrongAnswer(
     resetTargetId = (startNode as { id: number } | null)?.id ?? gameNodeId;
   }
 
-  // Build preserved set: active penalty nodes + reset target
-  const { data: penaltyNodes } = await supabase
-    .from('nodes')
-    .select('id')
-    .eq('node_type', 'penalty');
+  //Build preserved set and compute nodes to lock
+  //  Preserved set rules:
+  //   1. The reset target itself.
+  //   2. All graph ancestors of the reset target (BFS on reversed edges).
+  //   3. Active (unlocked or solved) penalty nodes — always kept regardless
+  //      of graph position because they live off the main path.
+  //
+  //  Everything else in the participant's progress rows gets locked.
 
-  const penaltyNodeIds = ((penaltyNodes || []) as { id: number }[]).map((n) => n.id);
+  // Fetch all edges and participant progress in parallel
+  const [edgesResult, progressResult2] = await Promise.all([
+    supabase.from('node_edges').select('from_node, to_node'),
+    supabase
+      .from('participant_node_progress')
+      .select('node_id, status')
+      .eq('participant_id', participantId),
+  ]);
 
-  const { data: activePenalties } = await supabase
-    .from('participant_node_progress')
-    .select('node_id')
-    .eq('participant_id', participantId)
-    .in('node_id', penaltyNodeIds)
-    .in('status', ['unlocked', 'solved']);
+  const progressRows = (progressResult2.data || []) as {
+    node_id: number;
+    status:  string;
+  }[];
 
-
-  const preservedIds = new Set(
-    ((activePenalties || []) as { node_id: number }[]).map((p) => p.node_id)
-  );
-  preservedIds.add(resetTargetId);
-
-  const { data: alreadySolved } = await supabase
-    .from('participant_node_progress')
-    .select('node_id')
-    .eq('participant_id', participantId)
-    .eq('status', 'solved');
-
-  for (const p of (alreadySolved || []) as { node_id: number }[]) {
-    preservedIds.add(p.node_id);
+  // Build reverse adjacency map: to_node → [from_nodes]
+  const reverseAdj = new Map<number, number[]>();
+  for (const edge of (edgesResult.data || []) as { from_node: number; to_node: number }[]) {
+    if (!reverseAdj.has(edge.to_node)) reverseAdj.set(edge.to_node, []);
+    reverseAdj.get(edge.to_node)!.push(edge.from_node);
   }
 
-  // Lock everything outside the preserved set
-  const { data: allProgress } = await supabase
-    .from('participant_node_progress')
-    .select('node_id')
-    .eq('participant_id', participantId);
+  // BFS backwards from resetTargetId — collects the reset target + all ancestors
+  const ancestorIds = new Set<number>();
+  const queue: number[] = [resetTargetId];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (ancestorIds.has(current)) continue;
+    ancestorIds.add(current);
+    for (const parent of (reverseAdj.get(current) || [])) {
+      queue.push(parent);
+    }
+  }
 
-  const nodesToLock = ((allProgress || []) as { node_id: number }[])
+  const penaltyIdSet = new Set(penaltyIds);
+
+  // Build preserved set: ancestors + active penalty nodes
+  const preservedIds = new Set<number>(ancestorIds);
+
+  for (const p of progressRows) {
+    if (penaltyIdSet.has(p.node_id) && (p.status === 'unlocked' || p.status === 'solved')) {
+      preservedIds.add(p.node_id);
+    }
+  }
+
+  const nodesToLock = progressRows
     .map((p) => p.node_id)
     .filter((id) => !preservedIds.has(id));
 
-  if (nodesToLock.length > 0) {
-    await supabase
-      .from('participant_node_progress')
-      .update({ status: 'locked', solved_at: null })
-      .eq('participant_id', participantId)
-      .in('node_id', nodesToLock);
-  }
+  //Single atomic RPC write
+  const { error: rpcErr } = await supabase.rpc('finalize_wrong_answer', {
+    p_participant_id:         participantId,
+    p_node_id:                gameNodeId,
+    p_question_id:            question.id,
+    p_ts:                     timestamp,
+    p_penalty_node_to_unlock: penaltyNodeUnlocked,
+    p_reset_target_id:        resetTargetId,
+    p_nodes_to_lock:          nodesToLock,
+    p_total_correct:          gameState.total_correct,
+    p_total_mistakes:         totalMistakesUpdated,
+    p_last_checkpoint_id:     gameState.last_checkpoint_id ?? null,
+    p_penalty_counter:        penaltyCounterUpdated,
+    p_penalty_nodes_unlocked: penaltyNodesUnlockedUpdated,
+    p_current_node_id:        resetTargetId,
+  });
 
-  // Re-open reset target
-  await supabase
-    .from('participant_node_progress')
-    .upsert(
-      {
-        participant_id: participantId,
-        node_id: resetTargetId,
-        status: 'unlocked',
-        solved_at: null,
-        unlocked_at: timestamp,
-      },
-      { onConflict: 'participant_id,node_id' }
-    );
-
-  // Delete assignment for reset target (forces fresh question draw)
-  await supabase
-    .from('participant_question_assignment')
-    .delete()
-    .eq('participant_id', participantId)
-    .eq('node_id', resetTargetId);
-
-  // Delete assignment for the node they got wrong (forces fresh question draw)
-  await supabase
-    .from('participant_question_assignment')
-    .delete()
-    .eq('participant_id', participantId)
-    .eq('node_id', gameNodeId);
-
-  updated.current_node_id = resetTargetId;
+  if (rpcErr) throw new Error(`finalize_wrong_answer failed: ${rpcErr.message}`);
 
   return {
-    state: updated,
-    submitResult: {
-      correct: false,
-      penaltyNodeUnlocked,
-      sentBackToNodeId: resetTargetId,
-    },
+    correct:             false,
+    penaltyNodeUnlocked,
+    sentBackToNodeId:    resetTargetId,
   };
 }
 
-// ─────────────────────────────────────────
-// 4. SCORE
-// ─────────────────────────────────────────
+// 4. SCORE  (standalone utility — not used on the submit path)
 export async function computeScore(
   participantId: number,
-  penaltyCounterOverride?: number
+  penaltyCounterOverride?: number,
 ): Promise<number> {
   const { data: progressRows } = await supabase
     .from('participant_node_progress')
@@ -895,7 +861,7 @@ export async function computeScore(
 
   if (!progressRows || progressRows.length === 0) return 0;
 
-  const nodeIds = (progressRows as { node_id: number; status: string }[]).map(p => p.node_id);
+  const nodeIds = (progressRows as { node_id: number; status: string }[]).map((p) => p.node_id);
 
   const { data: nodeRows } = await supabase
     .from('nodes')
@@ -920,7 +886,7 @@ export async function computeScore(
     if (nodeType === 'normal')                                   normalPoints     += 25;
     else if (nodeType === 'start' || nodeType === 'checkpoint')  checkpointPoints += 30;
     else if (nodeType === 'final')                               finalPoints      += 50;
-    // penalty nodes: solving gives +0 pts, just reduces penalty_counter by 1
+    // penalty nodes: solving gives +0 pts, just reduces penalty_counter
   }
 
   let penaltyCounter: number;
@@ -935,6 +901,6 @@ export async function computeScore(
     penaltyCounter = (gsRow as { penalty_counter: number } | null)?.penalty_counter ?? 0;
   }
 
-  const total = normalPoints + checkpointPoints + finalPoints - (penaltyCounter * 3);
+  const total = normalPoints + checkpointPoints + finalPoints - penaltyCounter * 3;
   return Math.max(0, total);
 }

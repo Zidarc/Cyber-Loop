@@ -3,8 +3,43 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { supabase } from '../config/supabase';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'Well ofc this isnt the key';
+
+if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
+const JWT_SECRET = process.env.JWT_SECRET as string;
+
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
+const PARTICIPANT_CACHE_TTL_MS = 5_000;
+
+type ParticipantCacheData = { active_token_hash: string | null; is_active: number };
+type ParticipantCacheEntry = { data: ParticipantCacheData; ts: number };
+const _participantCache = new Map<number, ParticipantCacheEntry>();
+
+function _cacheGet(id: number): ParticipantCacheData | null {
+  const entry = _participantCache.get(id);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > PARTICIPANT_CACHE_TTL_MS) {
+    _participantCache.delete(id);
+    return null;
+  }
+  return entry.data;
+}
+
+function _cacheSet(id: number, data: ParticipantCacheData): void {
+  _participantCache.set(id, { data, ts: Date.now() });
+}
+
+function _cacheInvalidate(id: number): void {
+  _participantCache.delete(id);
+}
+function timingSafeStringEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) {
+    crypto.timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 export interface ParticipantRow {
   id: number;
@@ -46,16 +81,16 @@ export const authService = {
 
     const payload: JwtPayload & { loginId: string } = {
       participantId: participant.id,
-      username: participant.username,
-      teamName: participant.team_name,
-      role: 'participant',
-      loginId: crypto.randomUUID(),
+      username:      participant.username,
+      teamName:      participant.team_name,
+      role:          'participant',
+      loginId:       crypto.randomUUID(),
     };
 
     const token = jwt.sign(
       payload,
       JWT_SECRET as jwt.Secret,
-      { expiresIn: JWT_EXPIRES_IN } as jwt.SignOptions
+      { expiresIn: JWT_EXPIRES_IN } as jwt.SignOptions,
     );
     const tokenHash = hashToken(token);
 
@@ -65,6 +100,7 @@ export const authService = {
       .eq('id', participant.id);
 
     if (updateError) return null;
+    _cacheInvalidate(participant.id);
 
     return { token };
   },
@@ -79,20 +115,28 @@ export const authService = {
       .maybeSingle();
 
     if (selectError || !row) return false;
+
     const stored = row as { active_token_hash: string | null };
-    if (stored.active_token_hash !== tokenHash) return false;
+    if (!stored.active_token_hash || !timingSafeStringEqual(stored.active_token_hash, tokenHash)) {
+      return false;
+    }
 
     const { error: updateError } = await supabase
       .from('participants')
       .update({ active_token_hash: null })
       .eq('id', participantId);
 
-    return !updateError;
+    if (updateError) return false;
+    _cacheInvalidate(participantId);
+    return true;
   },
 
   async getParticipantById(
-    id: number
-  ): Promise<{ active_token_hash: string | null; is_active: number } | null> {
+    id: number,
+  ): Promise<ParticipantCacheData | null> {
+    const cached = _cacheGet(id);
+    if (cached) return cached;
+
     const { data: row, error } = await supabase
       .from('participants')
       .select('active_token_hash, is_active')
@@ -100,6 +144,9 @@ export const authService = {
       .maybeSingle();
 
     if (error || !row) return null;
-    return row as { active_token_hash: string | null; is_active: number };
+
+    const result = row as ParticipantCacheData;
+    _cacheSet(id, result);
+    return result;
   },
 };
