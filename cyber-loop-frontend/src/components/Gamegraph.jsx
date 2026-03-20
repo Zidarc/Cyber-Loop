@@ -12,9 +12,9 @@ const NODE_LAYOUT = {
   6:  { x: 145,  y: 630, r: 24 },  // normal
   7:  { x: 1255, y: 635, r: 24 },  // normal
   8:  { x: 700,  y: 790, r: 32 },  // final
-  9:  { x: 52,   y: 430, r: 18 },  // penalty
-  10: { x: 1348, y: 430, r: 18 },  // penalty
-  11: { x: 52,   y: 660, r: 18 },  // penalty
+  9:  { x: 52,   y: 430, r: 26 },  // penalty
+  10: { x: 1348, y: 430, r: 26 },  // penalty
+  11: { x: 52,   y: 660, r: 26 },  // penalty
 }
 
 const DECOYS = [
@@ -31,21 +31,27 @@ const DECOYS = [
 const GAME_PATH = [1, 2, 3, 4, 5, 6, 7, 8]
 
 // ─────────────────────────────────────────────────────────────────────────────
-// COLOUR CONFIG
-// solved=green, penalty=red, checkpoint=cyan, final=gold, normal=orange
+// COLOUR CONFIG — ported directly from GameNode.jsx nodeStyles
 // ─────────────────────────────────────────────────────────────────────────────
 const TYPE_CFG = {
-  start:      { stroke:'#FFD700', fill:'rgba(255,210,0,0.13)',  glow:'rgba(255,210,0,0.72)',  anim:'nodeBreath',  dur:'2.8s' },
-  normal:     { stroke:'#FF6600', fill:'rgba(255,90,0,0.10)',   glow:'rgba(255,90,0,0.68)',   anim:'nodeBreath',  dur:'3.3s' },
-  checkpoint: { stroke:'#00E5FF', fill:'rgba(0,220,255,0.11)',  glow:'rgba(0,229,255,0.75)',  anim:'checkBreath', dur:'2.4s' },
-  penalty:    { stroke:'#FF1A1A', fill:'rgba(220,0,0,0.12)',    glow:'rgba(255,0,0,0.78)',    anim:'penThrob',    dur:'1.0s' },
-  final:      { stroke:'#FFE545', fill:'rgba(255,215,0,0.14)',  glow:'rgba(255,225,0,0.82)',  anim:'finalBreath', dur:'2.0s' },
+  // start: amber/gold — nodeStyles.start
+  start:      { stroke:'#FFB300', fill:'rgba(255,179,0,0.18)',  glow:'rgba(255,179,0,0.40)',  anim:'nodeBreath',  dur:'2.8s' },
+  // normal/active: dark red → orange — nodeStyles.active
+  normal:     { stroke:'#8B0000', fill:'rgba(139,0,0,0.20)',    glow:'rgba(255,106,0,0.35)',  anim:'nodeBreath',  dur:'3.3s' },
+  // checkpoint: orange checkerboard fill — nodeStyles.checkpoint
+  checkpoint: { stroke:'#FF8C00', fill:'PATTERN',               glow:'rgba(255,140,0,0.50)',  anim:'checkPulse',  dur:'2.0s' },
+  // penalty: deep crimson — nodeStyles.penalty
+  penalty:    { stroke:'#B71C1C', fill:'rgba(183,28,28,0.22)',  glow:'rgba(183,28,28,0.40)',  anim:'penJitter',   dur:'1.5s' },
+  // final: electric blue — nodeStyles.final
+  final:      { stroke:'#29B6F6', fill:'rgba(41,182,246,0.18)', glow:'rgba(41,182,246,0.40)', anim:'finalBreath', dur:'2.0s' },
 }
 const SOLVED_CFG = {
-  stroke:'#00E676', fill:'rgba(0,220,110,0.12)', glow:'rgba(0,230,118,0.75)', anim:'solvedBreath', dur:'2.6s',
+  // solved: bright green — nodeStyles.solved
+  stroke:'#00E676', fill:'rgba(0,230,118,0.15)', glow:'rgba(0,230,118,0.40)', anim:'solvedBreath', dur:'2.6s',
 }
 const LOCKED_CFG = {
-  stroke:'rgba(50,40,70,0.40)', fill:'rgba(10,8,20,0.78)', glow:null, anim:null, dur:null,
+  // inactive: muted grey, semi-transparent — nodeStyles.inactive
+  stroke:'#4A4A4A', fill:'rgba(74,74,74,0.12)', glow:null, anim:null, dur:null,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,7 +79,7 @@ const bs=(anim,dur,delay='0s')=>({
 // ─────────────────────────────────────────────────────────────────────────────
 // COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
-export default function GameGraph({nodes,onNodeClick,animEvents=[]}) {
+export default function GameGraph({nodes,onNodeClick,animEvents=[],onNodeSolvedAt}) {
   const [nodeAnims,    setNodeAnims]    = useState({})
   const [particles,    setParticles]    = useState([])
   const [finalBoom,    setFinalBoom]    = useState(false)
@@ -117,16 +123,19 @@ export default function GameGraph({nodes,onNodeClick,animEvents=[]}) {
     return keys.join(',')
   },[nodeMap])
 
-  // Detect newly lit edges and start fuse animation
+  // Detect newly lit AND newly unlit edges
   useEffect(()=>{
     const current=new Set(litKeyStr?litKeyStr.split(','):[])
     const newly=[]
+    const removed=[]
     current.forEach(k=>{if(!prevLitRef.current.has(k))newly.push(k)})
+    prevLitRef.current.forEach(k=>{if(!current.has(k))removed.push(k)})
     prevLitRef.current=current
-    if(!newly.length) return
+    if(!newly.length&&!removed.length) return
     setLitEdgeState(prev=>{
       const next={...prev}
       newly.forEach(k=>{next[k]='animating'})
+      removed.forEach(k=>{delete next[k]})   // ← remove lines when nodes re-lock
       return next
     })
     newly.forEach(k=>{
@@ -143,7 +152,10 @@ export default function GameGraph({nodes,onNodeClick,animEvents=[]}) {
         const pos=NODE_LAYOUT[ev.nodeId]; if(!pos) return
         setNodeAnims(a=>({...a,[ev.nodeId]:'solving'}))
         setTimeout(()=>setNodeAnims(a=>({...a,[ev.nodeId]:null})),900)
-        const col=ev.nodeType==='final'?'#FFD700':ev.nodeType==='checkpoint'?'#00E5FF':'#00E676'
+        // Notify parent of SVG position for ripple origin
+        onNodeSolvedAt?.(ev.nodeId, pos.x, pos.y)
+        // Particle colors match GameNode.jsx nodeStyles stroke colors
+        const col=ev.nodeType==='final'?'#29B6F6':ev.nodeType==='checkpoint'?'#FF8C00':'#00E676'
         const batch=Array.from({length:20},(_,i)=>({
           id:`${ev.evId}-${i}`,cx:pos.x,cy:pos.y,
           angle:(i/20)*Math.PI*2+(Math.random()-.5)*.3,
@@ -201,19 +213,27 @@ export default function GameGraph({nodes,onNodeClick,animEvents=[]}) {
         .ws6{animation:webShimmer 3.6s ease-in-out 2.70s infinite}
         .ws7{animation:webShimmer 3.6s ease-in-out 3.15s infinite}
 
-        /* Glow pulses — opacity only, no ring, no scale. The blur filter on the
-           filled circle is what produces the soft corona effect.               */
-        @keyframes nodeBreath   { 0%,100%{opacity:.13} 50%{opacity:.72} }
-        @keyframes checkBreath  { 0%,100%{opacity:.15} 50%{opacity:.82} }
-        @keyframes solvedBreath { 0%,100%{opacity:.14} 50%{opacity:.74} }
-        @keyframes penThrob     { 0%,100%{opacity:.20} 50%{opacity:.98} }
-        @keyframes finalBreath  { 0%,100%{opacity:.20} 50%{opacity:.92} }
-        @keyframes atmosphereF  { 0%,100%{opacity:.03} 50%{opacity:.18} }
-        @keyframes decoyPulse   { 0%,100%{opacity:.10}                   50%{opacity:.32} }
+        /* Glow pulses — opacity-only blur fills (atmosphere/main/tight layers) */
+        @keyframes nodeBreath   { 0%,100%{opacity:.12} 50%{opacity:.65} }
+        @keyframes solvedBreath { 0%,100%{opacity:.14} 50%{opacity:.68} }
+        @keyframes finalBreath  { 0%,100%{opacity:.14} 50%{opacity:.72} }
+        @keyframes atmosphereF  { 0%,100%{opacity:.03} 50%{opacity:.16} }
+        @keyframes decoyPulse   { 0%,100%{opacity:.10} 50%{opacity:.30} }
 
-        /* Pulsing line glow — the lit path edges breathe in opacity */
-        @keyframes edgeGlow     { 0%,100%{opacity:.32} 50%{opacity:1.0} }
-        @keyframes edgeGlowFast { 0%,100%{opacity:.40} 50%{opacity:1.0} }
+        /* checkpoint — scale 1→1.08→1 + glow surge, from animationVariants.checkpoint */
+        @keyframes checkPulse {
+          0%,100% { opacity:.18; transform:scale(1)    }
+          50%     { opacity:.85; transform:scale(1.08) }
+        }
+        /* penalty — subtle scale jitter + micro-rotate, from animationVariants.penalty */
+        @keyframes penJitter {
+          0%,100% { opacity:.22; transform:scale(1)    rotate(0deg)   }
+          33%     { opacity:.80; transform:scale(1.03) rotate(.5deg)  }
+          66%     { opacity:.80; transform:scale(.97)  rotate(-.5deg) }
+        }
+
+        /* Animated flow dash — moves along drawn edges like React Flow animated:true */
+        @keyframes dashFlow     { from{stroke-dashoffset:22} to{stroke-dashoffset:0} }
         @keyframes spinR        { from{transform:rotate(0deg)}              to{transform:rotate(360deg)}           }
         @keyframes spinL        { from{transform:rotate(0deg)}              to{transform:rotate(-360deg)}          }
 
@@ -224,6 +244,7 @@ export default function GameGraph({nodes,onNodeClick,animEvents=[]}) {
         @keyframes solvFlash   { 0%{opacity:1} 50%{opacity:.60} 100%{opacity:1} }
         @keyframes finalBoomA  { 0%{opacity:0} 12%{opacity:.74} 100%{opacity:0} }
         @keyframes ptcFade     { 0%{opacity:1} 100%{opacity:0}  }
+        @keyframes penRingPulse { 0%,100%{opacity:.25;r:var(--pr,36)} 50%{opacity:.85;r:var(--pr,44)} }
 
         .node-unlocked { cursor: pointer !important; }
       `}</style>
@@ -234,18 +255,42 @@ export default function GameGraph({nodes,onNodeClick,animEvents=[]}) {
           animation:'finalBoomA 1.8s ease-out forwards'}}/>
       )}
 
-      <svg viewBox="0 0 1400 860" width="100%" height="100%"
+      <svg className="game-svg" viewBox="0 0 1400 860" width="100%" height="100%"
         style={{display:'block'}} preserveAspectRatio="xMidYMid meet">
 
-        {/* Ghost path — faint dashed lines hint at the structure */}
-        <g>
-          {GAME_PATH.slice(0,-1).map((fid,i)=>{
-            const tid=GAME_PATH[i+1],a=NODE_LAYOUT[fid],b=NODE_LAYOUT[tid]
-            if(!a||!b) return null
-            return <line key={`ghost-${fid}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-              stroke="rgba(80,50,100,0.15)" strokeWidth="1.5" strokeDasharray="5 10"/>
-          })}
-        </g>
+        <defs>
+          {/* Checkpoint checkerboard fill — matches GameNode.jsx repeating-conic-gradient */}
+          <pattern id="cpPattern" x="0" y="0" width="12" height="12" patternUnits="userSpaceOnUse">
+            <rect width="6"  height="6"  x="0" y="0" fill="rgba(255,140,0,0.18)"/>
+            <rect width="6"  height="6"  x="6" y="6" fill="rgba(255,140,0,0.18)"/>
+            <rect width="12" height="12" x="0" y="0" fill="rgba(18,18,24,0.80)"/>
+            <rect width="6"  height="6"  x="0" y="0" fill="rgba(255,140,0,0.18)"/>
+            <rect width="6"  height="6"  x="6" y="6" fill="rgba(255,140,0,0.18)"/>
+          </pattern>
+          {/* Radial fills baked as SVG gradients for start / normal / solved / final / penalty */}
+          <radialGradient id="gStart"  cx="50%" cy="50%" r="50%">
+            <stop offset="0%"   stopColor="#FFB300" stopOpacity=".28"/>
+            <stop offset="100%" stopColor="#FFB300" stopOpacity=".08"/>
+          </radialGradient>
+          <radialGradient id="gNormal" cx="50%" cy="50%" r="50%">
+            <stop offset="0%"   stopColor="#8B0000" stopOpacity=".32"/>
+            <stop offset="100%" stopColor="#8B0000" stopOpacity=".10"/>
+          </radialGradient>
+          <radialGradient id="gSolved" cx="50%" cy="50%" r="50%">
+            <stop offset="0%"   stopColor="#00E676" stopOpacity=".22"/>
+            <stop offset="100%" stopColor="#00E676" stopOpacity=".05"/>
+          </radialGradient>
+          <radialGradient id="gFinal"  cx="50%" cy="50%" r="50%">
+            <stop offset="0%"   stopColor="#29B6F6" stopOpacity=".28"/>
+            <stop offset="100%" stopColor="#29B6F6" stopOpacity=".08"/>
+          </radialGradient>
+          <radialGradient id="gPenalty" cx="50%" cy="50%" r="50%">
+            <stop offset="0%"   stopColor="#B71C1C" stopOpacity=".32"/>
+            <stop offset="100%" stopColor="#B71C1C" stopOpacity=".10"/>
+          </radialGradient>
+        </defs>
+
+        {/* No ghost path — edges are fully hidden until the connection is made */}
 
         {/* Web threads — shimmer wave sweeps left to right */}
         <g>
@@ -256,13 +301,10 @@ export default function GameGraph({nodes,onNodeClick,animEvents=[]}) {
           ))}
         </g>
 
-        {/* Lit path edges
-            • Line draws itself: stroke-dashoffset transitions from full-length → 0
-              in 0.85s, matching the fuse dot travel. All three layers draw together.
-            • After drawn: the three layers pulse in opacity via edgeGlow.
-            • Traveling pulse orb: a blurred glow ball rides the path repeatedly,
-              visible only during travel (~40% of each 2.6s cycle), then hides,
-              then repeats — the "energy flowing from node to node" effect.       */}
+        {/* Lit path edges — GraphBoard.jsx style: dark #333/#444, strokeWidth 2.
+            Hidden until lit. Draws in via stroke-dashoffset (matches fuse dot travel).
+            Once drawn: core stays dark like GraphBoard, subtle glow halo only.
+            Animated "flow" dashes mimic React Flow's animated:true edges.          */}
         <g>
           {GAME_PATH.slice(0,-1).map((fid,i)=>{
             const tid=GAME_PATH[i+1],key=`${fid}-${tid}`,eSt=litEdgeState[key]
@@ -270,71 +312,44 @@ export default function GameGraph({nodes,onNodeClick,animEvents=[]}) {
             const a=NODE_LAYOUT[fid],b=NODE_LAYOUT[tid]; if(!a||!b) return null
             const done=eSt==='done'
             const path=`M${a.x},${a.y} L${b.x},${b.y}`
-            // Line length for stroke-dashoffset draw animation
             const dist=Math.hypot(b.x-a.x,b.y-a.y)
             return (
               <g key={`le-${key}`}>
-                {/* Outer halo — blurred wide line, draws itself then pulses */}
+                {/* Subtle halo — barely-there glow, draws in with the line */}
                 <line x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                  stroke="rgba(255,100,0,1)" strokeWidth="28"
+                  stroke="rgba(255,106,0,0.18)" strokeWidth="10"
                   strokeDasharray={dist}
                   style={{
                     strokeDashoffset: done ? 0 : dist,
                     transition: 'stroke-dashoffset 0.85s ease-out',
-                    filter: 'blur(14px)',
-                    animation: done ? 'edgeGlow 2.8s ease-in-out infinite' : 'none',
+                    filter: 'blur(6px)',
                   }}/>
-                {/* Mid glow — draws itself then pulses faster */}
+                {/* Core line — dark #444, strokeWidth 2, matches GraphBoard static edges */}
                 <line x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                  stroke="rgba(255,130,0,1)" strokeWidth="8"
+                  stroke="#444" strokeWidth="2"
                   strokeDasharray={dist}
                   style={{
                     strokeDashoffset: done ? 0 : dist,
                     transition: 'stroke-dashoffset 0.85s ease-out',
-                    filter: 'blur(5px)',
-                    animation: done ? 'edgeGlowFast 2.8s ease-in-out infinite' : 'none',
                   }}/>
-                {/* Core sharp line — draws itself */}
-                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                  stroke="rgba(255,160,40,0.92)" strokeWidth="1.6"
-                  strokeDasharray={dist}
-                  style={{
-                    strokeDashoffset: done ? 0 : dist,
-                    transition: 'stroke-dashoffset 0.85s ease-out',
-                    animation: done ? 'edgeGlowFast 2.8s ease-in-out infinite' : 'none',
-                  }}/>
-                {/* Fuse dot — leads the line as it draws (animating phase only) */}
+                {/* Animated flow dashes — mimics React Flow animated:true.
+                    Shown only after fully drawn. Moving dashes travel A→B. */}
+                {done&&(
+                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                    stroke="#888" strokeWidth="1.5"
+                    strokeDasharray="8 14"
+                    style={{animation:'dashFlow 1.4s linear infinite'}}/>
+                )}
+                {/* Fuse dot — leads the line as it draws */}
                 {eSt==='animating'&&(
                   <>
-                    <circle r={14} fill="rgba(255,140,0,.22)" style={{filter:'blur(7px)'}}>
+                    <circle r={12} fill="rgba(255,106,0,0.20)" style={{filter:'blur(6px)'}}>
                       <animateMotion dur="0.85s" fill="freeze" path={path}/>
                     </circle>
-                    <circle r={5} fill="#FFAA00">
+                    <circle r={4.5} fill="#FF6A00">
                       <animateMotion dur="0.85s" fill="freeze" path={path}/>
                     </circle>
                   </>
-                )}
-                {/* Traveling pulse orb — repeats indefinitely on completed edges.
-                    keyTimes: invisible start → fade in → travel visible → fade out → long pause */}
-                {done&&(
-                  <g>
-                    {/* Outer bloom of the orb */}
-                    <circle r={16} fill="rgba(255,110,0,0.85)" style={{filter:'blur(11px)'}}>
-                      <animateMotion dur="2.6s" repeatCount="indefinite" path={path}/>
-                      <animate attributeName="opacity"
-                        values="0;0;1;1;0;0"
-                        keyTimes="0;0.04;0.10;0.42;0.50;1"
-                        dur="2.6s" repeatCount="indefinite"/>
-                    </circle>
-                    {/* Bright core of the orb */}
-                    <circle r={5} fill="#FFD080">
-                      <animateMotion dur="2.6s" repeatCount="indefinite" path={path}/>
-                      <animate attributeName="opacity"
-                        values="0;0;1;1;0;0"
-                        keyTimes="0;0.04;0.10;0.42;0.50;1"
-                        dur="2.6s" repeatCount="indefinite"/>
-                    </circle>
-                  </g>
                 )}
               </g>
             )
@@ -383,10 +398,20 @@ export default function GameGraph({nodes,onNodeClick,animEvents=[]}) {
               style={{animation:isPenIn?'glitchIn 1.1s ease-out':'none'}}
               onClick={()=>isUnlocked&&onNodeClick(sn)}
             >
-              {/* ── Glow layers — filled blurred circles all at r=pos.r.
-                   Rendered BEFORE the solid body, so the opaque body covers the
-                   centre portion. Only the blur that radiates OUTWARD past the
-                   circle edge is visible — a clean halo, not a blob.            ── */}
+              {/* ── LOCKED: render identically to decoys — dark featureless blob.
+                   No glow, no color, no icon. Indistinguishable from background noise
+                   until the player unlocks it.                                     ── */}
+              {isLocked && (
+                <>
+                  <circle r={pos.r+9} fill="rgba(70,50,90,0.55)"
+                    style={{filter:'blur(8px)',animation:`decoyPulse 4.8s ease-in-out ${dl} infinite`}}/>
+                  <circle r={pos.r} fill="rgba(14,10,24,0.80)" stroke="rgba(70,50,90,0.22)" strokeWidth=".9"/>
+                  <circle r={pos.r-7} fill="none" stroke="rgba(55,40,72,0.14)" strokeWidth=".5"/>
+                </>
+              )}
+
+              {/* ── ACTIVE (unlocked / solved / locking): full visual treatment ── */}
+              {!isLocked && (<>
 
               {/* Atmosphere — vast, barely-there outer bloom */}
               {isActive&&(
@@ -424,50 +449,70 @@ export default function GameGraph({nodes,onNodeClick,animEvents=[]}) {
                   style={{filter:'blur(14px)',animation:`solvedBreath ${cfg.dur} ease-in-out ${dl} infinite`}}/>
               )}
 
+          {/* Penalty outer pulse ring — extra visibility */}
+              {isPenalty && !isLocked && (
+                <circle r={pos.r+10} fill="none"
+                  stroke="rgba(183,28,28,0.7)" strokeWidth="1.5"
+                  style={{animation:'penRingPulse 1.2s ease-in-out infinite'}}/>
+              )}
+
               {/* Penalty glitch bloom on appear */}
               {isPenIn&&(
                 <circle r={pos.r} fill="rgba(255,0,0,0.70)"
                   style={{filter:'blur(18px)',transformBox:'fill-box',transformOrigin:'center',animation:'glitchIn .9s ease-out'}}/>
               )}
 
-              {/* Node body */}
-              <circle r={pos.r} fill={cfg.fill} stroke={cfg.stroke}
-                strokeWidth={isSolving?3.4:isActive?2.1:.8}
-                style={{animation:isSolving?'solvFlash .9s ease-out':'none'}}/>
+              {/* Node body — radial gradient fill from GameNode.jsx nodeStyles */}
+              {(() => {
+                const bodyFill = isSolved                    ? 'url(#gSolved)'
+                               : sn.nodeType==='start'       ? 'url(#gStart)'
+                               : sn.nodeType==='checkpoint'  ? 'url(#cpPattern)'
+                               : sn.nodeType==='penalty'     ? 'url(#gPenalty)'
+                               : sn.nodeType==='final'       ? 'url(#gFinal)'
+                               :                               'url(#gNormal)'
+                return (
+                  <circle r={pos.r} fill={bodyFill} stroke={cfg.stroke}
+                    strokeWidth={isSolving ? 3.2 : 2}
+                    style={{animation:isSolving?'solvFlash .9s ease-out':'none'}}/>
+                )
+              })()}
 
-              {/* Inner detail ring */}
-              {!isLocked&&(
-                <circle r={pos.r-7} fill="none" stroke={cfg.stroke} strokeWidth=".42" opacity=".30"/>
+              {/* Icon — from GameNode.jsx nodeIcons */}
+              {(()=>{
+                const icon = isSolved                    ? '✓'
+                           : sn.nodeType==='start'       ? '▶'
+                           : sn.nodeType==='checkpoint'  ? '⚑'
+                           : sn.nodeType==='penalty'     ? '☠'
+                           : sn.nodeType==='final'       ? '★'
+                           : isUnlocked                  ? '?'
+                           :                               '○'
+                const col  = isSolved                    ? '#00E676'
+                           : isLocked                    ? '#4A4A4A'
+                           : cfg.stroke
+                return (
+                  <text textAnchor="middle" dominantBaseline="central"
+                    y={-4} fontSize={pos.r*.72} fill={col}
+                    style={{fontFamily:"'Space Grotesk',sans-serif", pointerEvents:'none', userSelect:'none'}}>
+                    {icon}
+                  </text>
+                )
+              })()}
+
+              {/* Label — only START and FINAL show text, all other types show nothing */}
+              {(sn.nodeType==='start' || sn.nodeType==='final') && sn.label && (
+                <text textAnchor="middle" dominantBaseline="central"
+                  y={pos.r*.48} fontSize={pos.r*.38}
+                  fill={isSolved?'#00E676':cfg.stroke}
+                  opacity=".80"
+                  style={{fontFamily:"'Space Grotesk',sans-serif", fontWeight:600, letterSpacing:'.05em', pointerEvents:'none', userSelect:'none'}}>
+                  {sn.label}
+                </text>
               )}
 
-              {/* CHECKPOINT — two counter-rotating diamond rings */}
-              {isCheck&&isActive&&(
-                <>
-                  <rect x={-6} y={-6} width={12} height={12} rx="1"
-                    fill="none" stroke="#00E5FF" strokeWidth="1.1" opacity=".78"
-                    style={{transformBox:'fill-box',transformOrigin:'center',animation:'spinR 9s linear infinite'}}/>
-                  <rect x={-4} y={-4} width={8} height={8} rx=".5"
-                    fill="none" stroke="rgba(0,229,255,.45)" strokeWidth=".8"
-                    style={{transformBox:'fill-box',transformOrigin:'center',animation:'spinL 6s linear infinite'}}/>
-                </>
-              )}
+              {/* Solved center dot — subtle, behind the ✓ icon */}
+              {isSolved && <circle r={3} fill="#00E676" opacity=".70"/>}
 
-              {/* FINAL — slowly rotating hexagon */}
-              {isFinal&&isActive&&(
-                <polygon
-                  points={Array.from({length:6},(_,i)=>{
-                    const a=(i/6)*Math.PI*2-Math.PI/2
-                    return `${Math.cos(a)*9},${Math.sin(a)*9}`
-                  }).join(' ')}
-                  fill="rgba(255,215,0,.58)" stroke="none"
-                  style={{transformBox:'fill-box',transformOrigin:'center',animation:'spinR 20s linear infinite'}}/>
-              )}
-
-              {/* Solved center dot */}
-              {isSolved&&<circle r={4.5} fill="#00E676" opacity=".96"/>}
-
-              {/* Penalty active center dot */}
-              {isPenalty&&isActive&&!isSolved&&<circle r={3.5} fill="#FF1A1A" opacity=".92"/>}
+              </>) /* close !isLocked fragment */}
             </g>
           )
         })}

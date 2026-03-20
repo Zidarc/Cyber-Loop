@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Lightning from '../components/Lightning'
 import SplashCursor from '../components/SplashCursor'
-import { apiFetch } from '../lib/Api'
+import { apiFetch } from '../lib/api'
 import { supabase } from '../lib/supabase'
 
 /* ══════════════════════════════════════════════════════
@@ -217,23 +217,33 @@ function ScoreRow({ row, isYou, index, rowRef }) {
         </span>
       </td>
 
-      {/* NODES 1-8 */}
-      {row.nodes.filter(n => n.node_id >= 1 && n.node_id <= 8).map(node => (
-        <td key={node.node_id} style={{ ...tdStyle, width:50, background: getNodeBg(node) }}>
-          <span style={{ fontFamily:C.fontMono, fontSize:C.fzBase, fontWeight: node.status === 'solved' ? 700 : 400, color: getNodeColor(node) }}>
-            {node.status === 'solved' ? '✓' : '--'}
-          </span>
-        </td>
-      ))}
+      {/* NODES 1-8: explicit lookup per node_id so column order is always correct */}
+      {[1, 2, 3, 4, 5, 6, 7, 8].map(nid => {
+        const node = row.nodes.find(n => n.node_id === nid)
+        const color = node ? getNodeColor(node) : C.textDim
+        const solved = node?.status === 'solved'
+        return (
+          <td key={nid} style={{ ...tdStyle, width:50 }}>
+            <span style={{ fontFamily:C.fontMono, fontSize:C.fzBase, fontWeight: solved ? 700 : 400, color }}>
+              {solved ? '✓' : '--'}
+            </span>
+          </td>
+        )
+      })}
 
-      {/* PENALTIES */}
-      {row.nodes.filter(n => n.node_id >= 9).map(node => (
-        <td key={node.node_id} style={{ ...tdStyle, width:50, background: getNodeBg(node) }}>
-          <span style={{ fontFamily:C.fontMono, fontSize:C.fzBase, fontWeight: node.status === 'solved' ? 700 : 400, color: getNodeColor(node) }}>
-            {node.status === 'solved' ? '✓' : '--'}
-          </span>
-        </td>
-      ))}
+      {/* PENALTIES: explicit lookup for nodes 9, 10, 11 */}
+      {[9, 10, 11].map(nid => {
+        const node = row.nodes.find(n => n.node_id === nid)
+        const color = node ? getNodeColor(node) : C.textDim
+        const solved = node?.status === 'solved'
+        return (
+          <td key={nid} style={{ ...tdStyle, width:50 }}>
+            <span style={{ fontFamily:C.fontMono, fontSize:C.fzBase, fontWeight: solved ? 700 : 400, color }}>
+              {solved ? '✓' : '--'}
+            </span>
+          </td>
+        )
+      })}
 
       {/* MISTAKES */}
       <td style={{ ...tdStyle, width:70 }}>
@@ -425,7 +435,7 @@ export default function Scoreboard() {
         <span style={{ fontFamily:C.fontTitle, fontSize:C.fzBase, fontWeight:700, letterSpacing:'.28em', color:C.textPrimary }}>SCOREBOARD</span>
         <div style={{ display:'flex', alignItems:'center', gap:20 }}>
           <LiveDot connected={rtConnected}/>
-          <button className="back-btn" onClick={() => window.location.assign('/gamepage')} style={{ background:'none', border:'none', cursor:'none', fontFamily:C.fontMono, fontSize:C.fzXs, letterSpacing:'.10em', color:C.textHeader, transition:'color .18s' }}>
+          <button className="back-btn" onClick={() => window.location.assign('/maingamepage')} style={{ background:'none', border:'none', cursor:'none', fontFamily:C.fontMono, fontSize:C.fzXs, letterSpacing:'.10em', color:C.textHeader, transition:'color .18s' }}>
             ← BACK
           </button>
         </div>
@@ -473,12 +483,11 @@ export default function Scoreboard() {
                   <Th width={80}>SCORE</Th>
                   <Th width={60}>START</Th>
                   <Th width={50}>N1</Th>
-                  <Th width={50}>N2</Th>
-                  <Th width={50} borderColor='rgba(255,153,68,0.60)'>N3◆</Th>
-                  <Th width={50}>N4</Th>
-                  <Th width={50} borderColor='rgba(255,153,68,0.60)'>N5◆</Th>
+                  <Th width={50} borderColor='rgba(255,153,68,0.60)'>N2◆</Th>
+                  <Th width={50}>N3</Th>
+                  <Th width={50} borderColor='rgba(255,153,68,0.60)'>N4◆</Th>
+                  <Th width={50}>N5</Th>
                   <Th width={50}>N6</Th>
-                  <Th width={50}>N7</Th>
                   <Th width={50} borderColor='rgba(245,200,66,0.75)'>Final</Th>
                   <Th width={50} borderColor='rgba(227,18,18,0.60)'>P1</Th>
                   <Th width={50} borderColor='rgba(227,18,18,0.60)'>P2</Th>

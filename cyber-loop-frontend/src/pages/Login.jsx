@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import SplashCursor from '../components/SplashCursor'
 import Lightning from '../components/Lightning'
 import { apiFetch } from '../lib/api'
@@ -334,6 +335,7 @@ function getErrorMessage(status, serverMessage) {
    LOGIN
 ───────────────────────────────────────── */
 export default function Login() {
+  const navigate  = useNavigate()
   const [team,    setTeam]    = useState('')
   const [pass,    setPass]    = useState('')
   const [error,   setError]   = useState('')
@@ -597,9 +599,41 @@ export default function Login() {
             <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'.48rem',color:T.muted,letterSpacing:'.05em'}}>
               v1.0 &nbsp;·&nbsp; depth: ∞
             </span>
-            <span style={{display:'flex',alignItems:'center',gap:5}}>
-              <span style={{width:5,height:5,borderRadius:'50%',background:'#FF4400',boxShadow:'0 0 6px rgba(255,55,0,0.85)',animation:'blink 2s step-start infinite',display:'inline-block'}}/>
-              <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'.48rem',color:'rgba(210,85,35,0.52)',letterSpacing:'.05em'}}>CONTEST LIVE</span>
+            <span style={{display:'flex',alignItems:'center',gap:12}}>
+              {/* ← LANDING button — same CornerBtn style as Landing.jsx */}
+              <button
+                onClick={() => navigate('/')}
+                style={{
+                  position:'relative', background:'none', border:'none', cursor:'none',
+                  padding:'5px 10px',
+                  fontFamily:'"Share Tech Mono",monospace', fontSize:'.48rem',
+                  letterSpacing:'.12em', color:'rgba(200,170,150,0.45)',
+                  transition:'color .2s',
+                }}
+                onMouseEnter={e=>{
+                  e.currentTarget.style.color='rgba(255,255,255,0.75)'
+                  e.currentTarget.querySelectorAll('.lcb').forEach(el=>el.style.opacity='1')
+                }}
+                onMouseLeave={e=>{
+                  e.currentTarget.style.color='rgba(200,170,150,0.45)'
+                  e.currentTarget.querySelectorAll('.lcb').forEach(el=>el.style.opacity='0')
+                }}
+              >
+                {/* corner bracket accents */}
+                {[
+                  {top:0,left:0,  borderTop:'1px solid #e31212',borderLeft:'1px solid #e31212'},
+                  {top:0,right:0, borderTop:'1px solid #e31212',borderRight:'1px solid #e31212'},
+                  {bottom:0,left:0,  borderBottom:'1px solid #e31212',borderLeft:'1px solid #e31212'},
+                  {bottom:0,right:0, borderBottom:'1px solid #e31212',borderRight:'1px solid #e31212'},
+                ].map((st,i)=>(
+                  <span key={i} className="lcb" style={{position:'absolute',width:5,height:5,opacity:0,transition:'opacity .2s',...st}}/>
+                ))}
+                ← LANDING
+              </button>
+              <span style={{display:'flex',alignItems:'center',gap:5}}>
+                <span style={{width:5,height:5,borderRadius:'50%',background:'#FF4400',boxShadow:'0 0 6px rgba(255,55,0,0.85)',animation:'blink 2s step-start infinite',display:'inline-block'}}/>
+                <span style={{fontFamily:'"Share Tech Mono",monospace',fontSize:'.48rem',color:'rgba(210,85,35,0.52)',letterSpacing:'.05em'}}>CONTEST LIVE</span>
+              </span>
             </span>
           </div>
         </div>

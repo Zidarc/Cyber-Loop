@@ -2,19 +2,25 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authFetch } from '../lib/api'
 
-export default function GameNavbar({ endsAt, teamName, score, onTimerExpire }) {
+/**
+ * GameNavbar
+ *
+ * NEW prop: onTick(ms) — called every 500 ms with the current ms remaining.
+ * Maingamepage uses this to drive the ember-intensity ramp.
+ */
+export default function GameNavbar({ endsAt, teamName, score, onTimerExpire, onTick }) {
   const navigate  = useNavigate()
   const [timeLeft, setTimeLeft] = useState(null)
-  // ── FIX #2: guard so onTimerExpire fires exactly once, not every 500 ms ──
-  const firedRef = useRef(false)
+  const firedRef  = useRef(false)
 
   useEffect(() => {
     if (!endsAt) return
-    firedRef.current = false   // reset if endsAt changes (e.g. extension)
+    firedRef.current = false
 
     const tick = () => {
       const ms = Math.max(0, new Date(endsAt).getTime() - Date.now())
       setTimeLeft(ms)
+      onTick?.(ms)                          // ← NEW: bubble up to parent
       if (ms <= 0 && !firedRef.current) {
         firedRef.current = true
         onTimerExpire?.()
@@ -23,7 +29,7 @@ export default function GameNavbar({ endsAt, teamName, score, onTimerExpire }) {
     tick()
     const iv = setInterval(tick, 500)
     return () => clearInterval(iv)
-  }, [endsAt, onTimerExpire])
+  }, [endsAt, onTimerExpire, onTick])
 
   const fmt = (ms) => {
     if (ms === null) return '--:--:--'
@@ -34,7 +40,7 @@ export default function GameNavbar({ endsAt, teamName, score, onTimerExpire }) {
     return `${h}:${m}:${sc}`
   }
 
-  const isLow  = timeLeft !== null && timeLeft < 60000
+  const isLow  = timeLeft !== null && timeLeft < 60_000
   const isDead = timeLeft !== null && timeLeft <= 0
 
   const handleLogout = async () => {
@@ -57,6 +63,13 @@ export default function GameNavbar({ endsAt, teamName, score, onTimerExpire }) {
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Share+Tech+Mono&display=swap');
         @keyframes blink    { 0%,49%{opacity:1} 50%,100%{opacity:0} }
         @keyframes redPulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+        @keyframes panicShake {
+          0%,100%{transform:translateX(0)}
+          20%{transform:translateX(-2px)}
+          40%{transform:translateX(2px)}
+          60%{transform:translateX(-1px)}
+          80%{transform:translateX(1px)}
+        }
         .nav-btn {
           display:inline-flex;align-items:center;gap:5px;
           padding:5px 12px;border-radius:3px;
@@ -91,8 +104,13 @@ export default function GameNavbar({ endsAt, teamName, score, onTimerExpire }) {
           fontFamily: '"Share Tech Mono", monospace',
           fontSize: '1.25rem', fontWeight: 700, letterSpacing: '0.1em',
           color: isDead ? '#ff2222' : isLow ? '#ff5522' : 'rgba(255,255,255,0.88)',
-          animation: isLow && !isDead ? 'redPulse 0.9s ease-in-out infinite' : 'none',
-          textShadow: isLow ? '0 0 12px rgba(255,40,0,0.5)' : 'none',
+          animation: isLow && !isDead
+            ? 'redPulse 0.9s ease-in-out infinite, panicShake 0.4s ease-in-out infinite'
+            : 'none',
+          textShadow: isLow
+            ? '0 0 18px rgba(255,40,0,0.7), 0 0 40px rgba(255,0,0,0.3)'
+            : 'none',
+          transition: 'color 0.3s, text-shadow 0.3s',
         }}>
           {fmt(timeLeft)}
         </div>
@@ -115,7 +133,6 @@ export default function GameNavbar({ endsAt, teamName, score, onTimerExpire }) {
         >
           ⓘ Rules
         </a>
-        {/* ── FIX #7: updated route path to lowercase /scoreboard ── */}
         <button className="nav-btn" onClick={() => navigate('/scoreboard')}>Scoreboard</button>
         <button className="nav-btn" onClick={() => navigate('/team')}>Team</button>
         <button className="nav-btn nav-btn-red" onClick={handleLogout}>Logout</button>
