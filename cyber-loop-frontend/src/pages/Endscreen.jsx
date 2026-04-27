@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import EmberCanvas from '../components/EmberCanvas'
+import SplashCursor from '../components/SplashCursor'
 
 // ── Matches Landing.jsx exactly ───────────────────────────────────────────
 const COLORS = {
@@ -113,6 +114,7 @@ export default function EndScreen() {
         sizeMin={0.6} sizeRange={1.8} travelMin={0.32} travelRange={0.18}
         alphaScale={0.5} zIndex={1}
       />
+      <SplashCursor/>
 
       {/* TOP NAV — same layout as Landing */}
       <nav style={{
@@ -174,6 +176,16 @@ export default function EndScreen() {
           textTransform:'uppercase',
         }}>
           {isWin ? 'THE UPSIDE DOWN RELEASES ITS GRIP' : 'THE MIND FLAYER CLAIMS YOUR SOUL'}
+        </p>
+
+        <p data-animate style={{
+          fontFamily:'"Share Tech Mono",monospace', color:'rgba(255, 255, 255, 0.78)',
+          fontSize:'.82rem', letterSpacing:'.08em', lineHeight:1.7,
+          marginBottom:38,
+        }}>
+          {isWin
+            ? "You obtained Vecna's Mind Dial. Congratulations."
+            : "You lost Vecna's Mind Dial. The Upside Down keeps it for now."}
         </p>
 
         {/* Score card — matches glassBg card pattern from Landing/Login */}

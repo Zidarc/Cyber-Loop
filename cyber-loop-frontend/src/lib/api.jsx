@@ -8,7 +8,7 @@ export async function apiFetch(path, options = {}) {
       'Content-Type': 'application/json',
       // ── FIX #12: This header is only needed when tunnelling through ngrok locally.
       //             Sending it in production is harmless but noisy. Gate it on DEV mode.
-      ...(import.meta.env.DEV ? { 'ngrok-skip-browser-warning': 'true' } : {}),
+      'ngrok-skip-browser-warning': 'true',
       ...(options.headers ?? {}),
     },
   })

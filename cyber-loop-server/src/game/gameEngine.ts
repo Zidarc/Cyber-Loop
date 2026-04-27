@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase';
+import { getSupabaseNowIso } from '../utils/dbTime';
 
 export type NodeType = 'start' | 'normal' | 'checkpoint' | 'penalty' | 'final';
 
@@ -103,7 +104,7 @@ export async function getFullGameState(
   if (gsErr) throw new Error('Failed to load game state');
 
   if (!gsRow) {
-    const timestamp = new Date().toISOString();
+    const timestamp = await getSupabaseNowIso();
 
     const { data: newGs, error: createErr } = await supabase
       .from('participant_game_state')
@@ -224,7 +225,8 @@ export async function getFullGameState(
 //      cannot be assigned to another node simultaneously.
 //
 //  [B] Immediate-repeat block — excluded for exactly ONE draw
-//      last_question_id = the last question seen, correct OR wrong.
+//      Latest attempt question id (correct OR wrong) is excluded once.
+//      Falls back to participant_game_state.last_question_id if needed.
 //      Prevents the same question from appearing twice in a row.
 //
 //  [C] Post-checkpoint permanent exclusion
@@ -236,6 +238,10 @@ export async function getFullGameState(
 //
 //  [D] Pre-checkpoint re-entry
 //      If lastCheckpointId is null, rule [C] never runs.
+//
+//  [E] Solved penalty exclusion
+//      For penalty pool draws, questions that were used to solve already-solved
+//      penalty nodes are excluded so they do not repeat across later penalties.
 export async function getNextQuestion(
   nodeId: number,
   participantId: number,
@@ -284,13 +290,26 @@ export async function getNextQuestion(
   const isPenalty               = nodeType === 'penalty';
   const poolType: 'main' | 'penalty' = isPenalty ? 'penalty' : 'main';
 
-  const { data: gsRow } = await supabase
+  const [gsResult, latestAttemptResult] = await Promise.all([
+    supabase
     .from('participant_game_state')
     .select('last_question_id, last_checkpoint_id')
     .eq('participant_id', participantId)
-    .maybeSingle();
+    .maybeSingle(),
+    supabase
+      .from('question_attempts')
+      .select('question_id, attempted_at')
+      .eq('participant_id', participantId)
+      .order('attempted_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
-  const lastQuestionId  = (gsRow as { last_question_id:  number | null } | null)?.last_question_id;
+  const gsRow = gsResult.data;
+  const latestAttemptRow = latestAttemptResult.data as { question_id: number; attempted_at: string } | null;
+
+  const lastQuestionId  = latestAttemptRow?.question_id
+    ?? (gsRow as { last_question_id: number | null } | null)?.last_question_id;
   const lastCheckpointId = (gsRow as { last_checkpoint_id: number | null } | null)?.last_checkpoint_id;
 
   //Rule [A]: currently active assignments (IDs to exclude)
@@ -303,7 +322,7 @@ export async function getNextQuestion(
     ((allAssignments || []) as { question_id: number }[]).map((r) => r.question_id),
   );
 
-  //Rule [C]: post-checkpoint permanently excluded question IDs
+  //Rule [C]/[E]: permanently excluded question IDs for the active pool
   let solvedQuestionIds = new Set<number>();
 
   if (!isPenalty && lastCheckpointId != null) {
@@ -337,6 +356,52 @@ export async function getNextQuestion(
       }
 
       solvedQuestionIds = new Set(latestPerNode.values());
+    }
+  }
+
+  if (isPenalty) {
+    const [solvedProgressResult, allPenaltyNodesResult] = await Promise.all([
+      supabase
+        .from('participant_node_progress')
+        .select('node_id')
+        .eq('participant_id', participantId)
+        .eq('status', 'solved'),
+      supabase
+        .from('nodes')
+        .select('id')
+        .eq('node_type', 'penalty'),
+    ]);
+
+    const solvedNodeIds = ((solvedProgressResult.data || []) as { node_id: number }[])
+      .map((n) => n.node_id);
+    const penaltyNodeIdSet = new Set(
+      ((allPenaltyNodesResult.data || []) as { id: number }[]).map((n) => n.id),
+    );
+
+    const solvedPenaltyNodeIds = solvedNodeIds.filter((id) => penaltyNodeIdSet.has(id));
+
+    if (solvedPenaltyNodeIds.length > 0) {
+      const { data: solvedPenaltyAttempts } = await supabase
+        .from('question_attempts')
+        .select('question_id, node_id, attempted_at')
+        .eq('participant_id', participantId)
+        .eq('is_correct', 1)
+        .in('node_id', solvedPenaltyNodeIds)
+        .order('attempted_at', { ascending: false });
+
+      // Keep only the most recent correct answer per solved penalty node.
+      const latestPerPenaltyNode = new Map<number, number>();
+      for (const attempt of (solvedPenaltyAttempts || []) as {
+        question_id: number;
+        node_id: number;
+        attempted_at: string;
+      }[]) {
+        if (!latestPerPenaltyNode.has(attempt.node_id)) {
+          latestPerPenaltyNode.set(attempt.node_id, attempt.question_id);
+        }
+      }
+
+      solvedQuestionIds = new Set(latestPerPenaltyNode.values());
     }
   }
 
@@ -467,7 +532,7 @@ export async function submitAnswer(
   const currentNodeType = (nodeTypeResult.data as { node_type: NodeType } | null)?.node_type;
   if (!currentNodeType) throw new Error('Node not found');
 
-  const timestamp = new Date().toISOString();
+  const timestamp = await getSupabaseNowIso();
   const gameState = (gsResult.data ?? {
     participant_id:         participantId,
     total_correct:          0,
@@ -726,18 +791,17 @@ async function handleWrongAnswer(
       .eq('participant_id', participantId)
       .in('node_id', penaltyIds);
 
-    // Only treat currently UNLOCKED (not yet solved) penalty nodes as "active".
-    // Solved penalty nodes have already discharged their debt and their slot is
-    // considered free — but since solving them already decremented the counter,
-    // we don't re-unlock them. We just don't count them as blocking a new slot.
-    const currentlyUnlockedPenaltyIds = new Set(
+    // Penalty nodes should unlock only once per participant.
+    // Treat both unlocked and solved nodes as already consumed, so solved
+    // penalties never re-open on later mistakes.
+    const consumedPenaltyIds = new Set(
       ((existingPenaltyProgress || []) as { node_id: number; status: string }[])
-        .filter((p) => p.status === 'unlocked')
+        .filter((p) => p.status === 'unlocked' || p.status === 'solved')
         .map((p) => p.node_id),
     );
 
     const nextPenalty = ((allPenaltyNodes || []) as { id: number }[]).find(
-      (n) => !currentlyUnlockedPenaltyIds.has(n.id),
+      (n) => !consumedPenaltyIds.has(n.id),
     );
 
     if (nextPenalty) {

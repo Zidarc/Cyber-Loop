@@ -12,6 +12,32 @@ const TYPE_COLOR = {
 const FILE_ICON  = { image: '🖼', pdf: '📄', audio: '🎵', text: '📎' }
 const FILE_COLOR = { image: '#FF8C00', pdf: '#e31212', audio: '#FFB300', text: 'rgba(255,255,255,0.5)' }
 
+function getDisplayFileName(filePath) {
+  const cleanPath = String(filePath || '').trim().split('?')[0].split('#')[0]
+  if (!cleanPath) return ''
+
+  const rawName = cleanPath.split(/[\\/]/).filter(Boolean).pop() || ''
+  if (!rawName) return ''
+
+  let decoded = rawName
+  try {
+    decoded = decodeURIComponent(rawName)
+  } catch {
+    // Keep raw filename if decoding fails.
+  }
+
+  const stripped = decoded.replace(/^puzzle\d+[_-]+/i, '')
+  return stripped || decoded
+}
+
+function getAttachmentDisplayLabel(file) {
+  const fromPath = getDisplayFileName(file?.path)
+  if (fromPath) return fromPath
+
+  const fallback = String(file?.label || '').trim()
+  return fallback || 'File'
+}
+
 export default function PuzzleModal({ nodeId, nodeLabel, nodeType, onClose, onSubmitResult }) {
   const [question, setQuestion]   = useState(null)
   const [files, setFiles]         = useState([])
@@ -101,11 +127,18 @@ export default function PuzzleModal({ nodeId, nodeLabel, nodeType, onClose, onSu
         .hell-input::placeholder { color:rgba(255,255,255,0.18); }
         .hell-input:focus { border-color:rgba(227,18,18,0.45);box-shadow:0 0 0 2px rgba(227,18,18,0.1); }
         .file-link:hover { background:rgba(255,255,255,0.05)!important; }
+        .question-text {
+          white-space: pre-line;
+          user-select: text !important;
+          -webkit-user-select: text !important;
+          cursor: text !important;
+        }
       `}</style>
 
       <div
         style={{
           width: 'min(94vw,490px)',
+          maxHeight: '92vh',
           background: 'rgba(6,4,14,0.98)',
           borderRadius: 14,
           border: `1px solid ${
@@ -113,7 +146,10 @@ export default function PuzzleModal({ nodeId, nodeLabel, nodeType, onClose, onSu
             : feedback === 'wrong' ? 'rgba(227,18,18,0.55)'
             : `${accentColor}30`
           }`,
-          overflow: 'hidden', position: 'relative',
+          overflowX: 'hidden',
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          position: 'relative',
           animation: shake ? 'shake 0.7s ease-out'
             : feedback === 'correct' ? 'correctGl 0.9s ease-out'
             : feedback === 'wrong'   ? 'wrongGl 0.9s ease-out'
@@ -158,7 +194,7 @@ export default function PuzzleModal({ nodeId, nodeLabel, nodeType, onClose, onSu
           ) : question ? (
             <>
               {question.question_text && (
-                <div style={{ background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,255,255,0.06)',borderRadius:8,padding:'13px 15px',marginBottom:14,fontFamily:'"Share Tech Mono",monospace',fontSize:'0.82rem',color:'rgba(255,255,255,0.82)',lineHeight:1.85,letterSpacing:'0.03em' }}>
+                <div className="question-text" style={{ background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,255,255,0.06)',borderRadius:8,padding:'13px 15px',marginBottom:14,fontFamily:'"Share Tech Mono",monospace',fontSize:'0.82rem',color:'rgba(255,255,255,0.82)',lineHeight:1.85,letterSpacing:'0.03em' }}>
                   {question.question_text}
                 </div>
               )}
@@ -172,6 +208,7 @@ export default function PuzzleModal({ nodeId, nodeLabel, nodeType, onClose, onSu
                     {files.map((f, i) => {
                       const color = FILE_COLOR[f.mimeHint] || FILE_COLOR.text
                       const icon  = FILE_ICON[f.mimeHint]  || FILE_ICON.text
+                      const displayLabel = getAttachmentDisplayLabel(f)
                       return (
                         <a key={i} href={f.url} target="_blank" rel="noopener noreferrer"
                           className="file-link"
@@ -179,7 +216,7 @@ export default function PuzzleModal({ nodeId, nodeLabel, nodeType, onClose, onSu
                         >
                           <span style={{ fontSize:'0.95rem',flexShrink:0 }}>{icon}</span>
                           <div style={{ flex:1,minWidth:0 }}>
-                            <div style={{ fontFamily:'"Share Tech Mono",monospace',fontSize:'0.7rem',letterSpacing:'0.1em',color }}>{f.label}</div>
+                            <div style={{ fontFamily:'"Share Tech Mono",monospace',fontSize:'0.7rem',letterSpacing:'0.1em',color }}>{displayLabel}</div>
                             <div style={{ fontFamily:'"Share Tech Mono",monospace',fontSize:'0.52rem',color:'rgba(255,255,255,0.2)',marginTop:2 }}>Open in new tab ↗</div>
                           </div>
                           <span style={{ fontSize:'0.85rem',opacity:0.45,flexShrink:0 }}>↗</span>

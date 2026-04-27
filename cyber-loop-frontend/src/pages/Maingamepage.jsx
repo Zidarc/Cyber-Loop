@@ -162,7 +162,11 @@ export default function MainGamePage() {
     GAME_PATH.forEach((id, i) => { pathIdx[id] = i })
     newlyLocked.sort((a, b) => (pathIdx[b] ?? 99) - (pathIdx[a] ?? 99))
 
-    setGameData({ nodes, gameState, competition })
+    setGameData(prev => ({
+      nodes,
+      gameState,
+      competition: competition ?? prev?.competition,
+    }))
     setShowModal(false); setActiveNode(null)
 
     if (submitResult.correct) {
@@ -230,6 +234,7 @@ export default function MainGamePage() {
 
       <GameNavbar
         endsAt={gameData?.competition?.endsAt}
+        remainingMs={gameData?.competition?.remainingMs}
         teamName={teamName}
         score={score}
         onTimerExpire={handleTimerExpire}

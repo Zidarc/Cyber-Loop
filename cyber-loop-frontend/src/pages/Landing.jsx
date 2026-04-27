@@ -71,7 +71,7 @@ function FloatingRulebookBtn() {
   const [hovered, setHovered] = useState(false)
   return (
     <div style={{position:'fixed',bottom:32,right:32,zIndex:100,animation:'floatY 3s ease-in-out infinite'}}>
-      <a href="https://pdflink.to/recursionhell/" target="_blank" rel="noopener noreferrer"
+      <a href="https://drive.google.com/file/d/1NnmVffbFOUtGUaGuph9ht3SVu4ZrpD1C/view?usp=drive_link" target="_blank" rel="noopener noreferrer"
         onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}
         style={{display:'flex',alignItems:'center',gap:hovered?12:0,padding:'12px 16px',borderRadius:50,background:COLORS.glassBg,border:`1px solid rgba(255,255,255,0.1)`,backdropFilter:'blur(10px)',color:'#fff',cursor:'none',transition:'all .4s cubic-bezier(.23,1,.32,1)',textDecoration:'none'}}>
         <span style={{fontSize:'1.2rem',fontWeight:'bold'}}>ⓘ</span>
@@ -225,6 +225,12 @@ export default function Landing() {
               </p>
               <p data-animate style={{fontFamily:'"Cinzel"',color:COLORS.primaryRed,fontSize:'1.8rem',fontWeight:900,letterSpacing:'.3em',textShadow:`0 0 20px ${COLORS.glowRed}`,marginBottom:50}}>
                 RECURSION HELL
+              </p>
+              <p data-animate style={{fontFamily:'"Share Tech Mono",monospace',color:COLORS.textAsh,fontSize:'0.7rem',letterSpacing:'.28em',textTransform:'uppercase',marginBottom:8}}>
+                Zone 2: The Upside Down
+              </p>
+              <p data-animate style={{fontFamily:'"Share Tech Mono",monospace',color:COLORS.primaryRed,fontSize:'0.62rem',letterSpacing:'.32em',textTransform:'uppercase',marginBottom:42}}>
+                Mission 2
               </p>
               <div data-animate>
                 {/* ── FIX #6: navigate() keeps us inside the SPA router ── */}

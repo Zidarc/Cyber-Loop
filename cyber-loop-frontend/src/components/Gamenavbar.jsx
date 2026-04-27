@@ -5,20 +5,38 @@ import { authFetch } from '../lib/api'
 /**
  * GameNavbar
  *
+ * NEW prop: remainingMs — server-computed remaining milliseconds snapshot.
  * NEW prop: onTick(ms) — called every 500 ms with the current ms remaining.
  * Maingamepage uses this to drive the ember-intensity ramp.
  */
-export default function GameNavbar({ endsAt, teamName, score, onTimerExpire, onTick }) {
+export default function GameNavbar({ endsAt, remainingMs, teamName, score, onTimerExpire, onTick }) {
   const navigate  = useNavigate()
   const [timeLeft, setTimeLeft] = useState(null)
   const firedRef  = useRef(false)
+  const baseRemainingRef = useRef(null)
+  const startedPerfRef   = useRef(null)
 
   useEffect(() => {
-    if (!endsAt) return
+    if (remainingMs == null && !endsAt) return
     firedRef.current = false
 
+    if (remainingMs != null) {
+      baseRemainingRef.current = Math.max(0, Number(remainingMs) || 0)
+      startedPerfRef.current   = performance.now()
+    } else {
+      baseRemainingRef.current = null
+      startedPerfRef.current   = null
+    }
+
     const tick = () => {
-      const ms = Math.max(0, new Date(endsAt).getTime() - Date.now())
+      let ms = 0
+      if (baseRemainingRef.current != null && startedPerfRef.current != null) {
+        const elapsed = performance.now() - startedPerfRef.current
+        ms = Math.max(0, baseRemainingRef.current - elapsed)
+      } else {
+        ms = Math.max(0, new Date(endsAt).getTime() - Date.now())
+      }
+
       setTimeLeft(ms)
       onTick?.(ms)                          // ← NEW: bubble up to parent
       if (ms <= 0 && !firedRef.current) {
@@ -29,7 +47,7 @@ export default function GameNavbar({ endsAt, teamName, score, onTimerExpire, onT
     tick()
     const iv = setInterval(tick, 500)
     return () => clearInterval(iv)
-  }, [endsAt, onTimerExpire, onTick])
+  }, [endsAt, remainingMs, onTimerExpire, onTick])
 
   const fmt = (ms) => {
     if (ms === null) return '--:--:--'
@@ -127,7 +145,7 @@ export default function GameNavbar({ endsAt, teamName, score, onTimerExpire, onT
       {/* RIGHT — nav buttons */}
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <a
-          href="https://pdflink.to/recursionhell/"
+          href="https://drive.google.com/file/d/1NnmVffbFOUtGUaGuph9ht3SVu4ZrpD1C/view?usp=drive_link"
           target="_blank" rel="noopener noreferrer"
           className="nav-btn"
         >

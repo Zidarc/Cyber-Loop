@@ -4,7 +4,7 @@ import { getFullGameState, getNextQuestion, submitAnswer as engineSubmitAnswer }
 import { getCompetitionStatus } from './competition.service';
 
 const BUCKET = process.env.SUPABASE_BUCKET_QUESTIONS?.trim() || 'question-assets';
-const SIGNED_URL_EXPIRES_SEC = 60;
+const SIGNED_URL_EXPIRES_SEC = 10 * 60;
 
 
 export type MimeHint = 'image' | 'pdf' | 'audio' | 'text';
@@ -49,7 +49,28 @@ function getMimeHint(filePath: string): MimeHint {
   return 'text';
 }
 
-function makeLabel(mimeHint: MimeHint, index: number, total: number): string {
+function getDisplayFileName(filePath: string): string {
+  const cleanPath = String(filePath || '').trim().split('?')[0].split('#')[0];
+  if (!cleanPath) return '';
+
+  const rawName = cleanPath.split(/[\\/]/).filter(Boolean).pop() || '';
+  if (!rawName) return '';
+
+  let decoded = rawName;
+  try {
+    decoded = decodeURIComponent(rawName);
+  } catch {
+    // Keep the raw name if decoding fails.
+  }
+
+  const stripped = decoded.replace(/^puzzle\d+[_-]+/i, '');
+  return stripped || decoded;
+}
+
+function makeLabel(filePath: string, mimeHint: MimeHint, index: number, total: number): string {
+  const fileName = getDisplayFileName(filePath);
+  if (fileName) return fileName;
+
   const base = mimeHint === 'image' ? 'Image'
              : mimeHint === 'pdf'   ? 'PDF'
              : mimeHint === 'audio' ? 'Audio'
@@ -163,7 +184,7 @@ export const gameService = {
         url:      signed.signedUrl,
         path:     paths[i],
         mimeHint,
-        label:    makeLabel(mimeHint, i, paths.length),
+        label:    makeLabel(paths[i], mimeHint, i, paths.length),
       });
     }
 

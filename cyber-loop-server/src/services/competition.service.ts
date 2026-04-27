@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase';
+import { getSupabaseNowIso, getSupabaseNowMs } from '../utils/dbTime';
 
 const COMPETITION_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours
 const CACHE_TTL_MS = 5_000;                          // 5-second TTL
@@ -19,15 +20,16 @@ function invalidateCache(): void {
 export async function startCompetition(): Promise<CompetitionStatus> {
   invalidateCache();
 
-  const startedAt = new Date();
-  const endsAt    = new Date(startedAt.getTime() + COMPETITION_DURATION_MS);
+  const startedAtIso = await getSupabaseNowIso();
+  const startedAtMs  = new Date(startedAtIso).getTime();
+  const endsAtIso    = new Date(startedAtMs + COMPETITION_DURATION_MS).toISOString();
 
   const { error: cfgErr } = await supabase
     .from('competition_config')
     .update({
       is_active:  true,
-      started_at: startedAt.toISOString(),
-      ends_at:    endsAt.toISOString(),
+      started_at: startedAtIso,
+      ends_at:    endsAtIso,
     })
     .eq('id', 1);
 
@@ -42,8 +44,8 @@ export async function startCompetition(): Promise<CompetitionStatus> {
 
   return {
     isActive:    true,
-    startedAt:   startedAt.toISOString(),
-    endsAt:      endsAt.toISOString(),
+    startedAt:   startedAtIso,
+    endsAt:      endsAtIso,
     remainingMs: COMPETITION_DURATION_MS,
   };
 }
@@ -63,9 +65,9 @@ export async function endCompetition(): Promise<void> {
 }
 
 export async function getCompetitionStatus(): Promise<CompetitionStatus> {
-  const now = Date.now();
+  const cacheNow = Date.now();
 
-  if (_cache && now - _cache.ts < CACHE_TTL_MS) {
+  if (_cache && cacheNow - _cache.ts < CACHE_TTL_MS) {
     return _cache.status;
   }
 
@@ -79,7 +81,7 @@ export async function getCompetitionStatus(): Promise<CompetitionStatus> {
     const status: CompetitionStatus = {
       isActive: false, startedAt: null, endsAt: null, remainingMs: null,
     };
-    _cache = { status, ts: now };
+    _cache = { status, ts: cacheNow };
     return status;
   }
 
@@ -89,9 +91,10 @@ export async function getCompetitionStatus(): Promise<CompetitionStatus> {
     ends_at:    string | null;
   };
 
+  const nowMs = await getSupabaseNowMs();
   const endsAtMs    = cfg.ends_at ? new Date(cfg.ends_at).getTime() : null;
-  const remainingMs = endsAtMs ? Math.max(0, endsAtMs - now) : null;
-  if (cfg.is_active && endsAtMs && now >= endsAtMs) {
+  const remainingMs = endsAtMs ? Math.max(0, endsAtMs - nowMs) : null;
+  if (cfg.is_active && endsAtMs && nowMs >= endsAtMs) {
     await supabase.rpc('try_end_competition');
 
     const status: CompetitionStatus = {
@@ -100,7 +103,7 @@ export async function getCompetitionStatus(): Promise<CompetitionStatus> {
       endsAt:      cfg.ends_at,
       remainingMs: 0,
     };
-    _cache = { status, ts: Date.now() };
+    _cache = { status, ts: cacheNow };
     return status;
   }
 
@@ -110,6 +113,6 @@ export async function getCompetitionStatus(): Promise<CompetitionStatus> {
     endsAt:      cfg.ends_at,
     remainingMs,
   };
-  _cache = { status, ts: now };
+  _cache = { status, ts: cacheNow };
   return status;
 }
