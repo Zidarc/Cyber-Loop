@@ -228,6 +228,8 @@ export async function getFullGameState(
 //      Latest attempt question id (correct OR wrong) is excluded once.
 //      Falls back to participant_game_state.last_question_id if needed.
 //      Prevents the same question from appearing twice in a row.
+//      If that exclusion would exhaust the pool, the most recent question can
+//      be reused as a fallback so the node still has a question to show.
 //
 //  [C] Post-checkpoint permanent exclusion
 //      Once a checkpoint is passed (lastCheckpointId != null), questions
@@ -322,6 +324,27 @@ export async function getNextQuestion(
     ((allAssignments || []) as { question_id: number }[]).map((r) => r.question_id),
   );
 
+  const questionSelect = 'id, node_id, pool_type, question_type, question_text, file_path, difficulty';
+
+  const buildQuestionQuery = (excludeLastQuestion: boolean) => {
+    let query = supabase
+      .from('questions')
+      .select(questionSelect)
+      .eq('pool_type', poolType);
+
+    if (assignedIds.size > 0) {
+      query = query.not('id', 'in', `(${[...assignedIds].join(',')})`) as typeof query;
+    }
+    if (solvedQuestionIds.size > 0) {
+      query = query.not('id', 'in', `(${[...solvedQuestionIds].join(',')})`) as typeof query;
+    }
+    if (excludeLastQuestion && lastQuestionId != null) {
+      query = query.not('id', 'in', `(${lastQuestionId})`) as typeof query;
+    }
+
+    return query;
+  };
+
   //Rule [C]/[E]: permanently excluded question IDs for the active pool
   let solvedQuestionIds = new Set<number>();
 
@@ -405,26 +428,19 @@ export async function getNextQuestion(
     }
   }
 
-  // Rule [C] exclusion is applied as a second NOT IN if the set is non-empty.
-  const abExcluded: number[] = [...assignedIds];
-  if (lastQuestionId != null) abExcluded.push(lastQuestionId);
-  let query = supabase
-    .from('questions')
-    .select('id, node_id, pool_type, question_type, question_text, file_path, difficulty')
-    .eq('pool_type', poolType);
+  const { data: eligible } = await buildQuestionQuery(true);
 
-  if (abExcluded.length > 0) {
-    query = query.not('id', 'in', `(${abExcluded.join(',')})`) as typeof query;
-  }
-  if (solvedQuestionIds.size > 0) {
-    query = query.not('id', 'in', `(${[...solvedQuestionIds].join(',')})`) as typeof query;
+  let chosen: PublicQuestion | null = null;
+
+  if (eligible && eligible.length > 0) {
+    chosen = (eligible as PublicQuestion[])[Math.floor(Math.random() * eligible.length)] ?? null;
+  } else if (lastQuestionId != null) {
+    const { data: fallbackEligible } = await buildQuestionQuery(false);
+    chosen =
+      (fallbackEligible as PublicQuestion[] | null)?.find((q) => q.id === lastQuestionId) ?? null;
   }
 
-  const { data: eligible } = await query;
-
-  if (!eligible || eligible.length === 0) throw new Error('Question pool exhausted');
-
-  const chosen = (eligible as PublicQuestion[])[Math.floor(Math.random() * eligible.length)];
+  if (!chosen) throw new Error('Question pool exhausted');
 
   const { error: insertErr } = await supabase
     .from('participant_question_assignment')
