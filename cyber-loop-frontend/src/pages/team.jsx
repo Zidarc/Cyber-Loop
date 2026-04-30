@@ -26,7 +26,7 @@ const COLORS = {
 const TEAM = [
   {
     id: 'sana',
-    name: 'Sana',
+    name: 'Sana Munir',
     tier: 'command',
     role: 'Supreme Director',
     tags: ['COMMAND', 'CLEARANCE LVL 5'],
@@ -36,7 +36,7 @@ const TEAM = [
   },
   {
     id: 'adeena',
-    name: 'Adeena',
+    name: 'Adeena Asif',
     tier: 'command',
     role: 'Executive Director',
     tags: ['COMMAND', 'CLEARANCE LVL 5'],
