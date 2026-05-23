@@ -1,169 +1,110 @@
-# Cyber Loop
+# 🚀 Cyber Loop
 
-**Live Deployment:** [https://recursion-hell.vercel.app/](https://recursion-hell.vercel.app/)
+[![Vercel](https://img.shields.io/badge/deploy-vercel-000000?logo=vercel)](https://recursion-hell.vercel.app/) [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 
----
-
-## Technical Stack & Libraries Installed
-
-### Server-Side (Backend)
-- **Framework**: Express.js
-- **Database**: SQLite (via `better-sqlite3`)
-- **Authentication**: JWT (`jsonwebtoken`)
-- **Security**: `helmet`, `cors`, `express-rate-limit`
-- **Password Hashing**: `bcrypt`
-- **Validation**: `express-validator`
-- **External Services**: Supabase (`@supabase/supabase-js`)
-- **Dev Tools**: TypeScript, Vitest, tsx
-
-### Client-Side (Frontend)
-- **Framework**: React 19 (via Vite)
-- **Routing**: React Router DOM (v7)
-- **Styling**: Tailwind CSS (v4)
-- **Dev Tools**: ESLint, Vite
+**Live Demo:** https://recursion-hell.vercel.app/
 
 ---
 
-## Server Setup
+## ✨ About
 
-### 1. Navigate to Server Folder
+Cyber Loop is a real-time team-based puzzle game built with a Vite + React frontend and a TypeScript/Express backend. The project demonstrates modern web development patterns including authentication, game logic, and a responsive UI.
+
+## 🚧 Quick Links
+
+- Frontend: [cyber-loop-frontend](cyber-loop-frontend)
+- Backend: [cyber-loop-server](cyber-loop-server)
+
+---
+
+## 🧰 Tech Stack
+
+- Frontend: React (Vite), Tailwind CSS, React Router
+- Backend: Express (TypeScript), SQLite (dev), Supabase integrations
+- Auth: JWT
+- Dev & Test: ESLint, Vitest, tsx
+
+---
+
+## ⚡ Local Setup (Recommended)
+
+Follow these steps to run both the frontend and backend locally.
+
+### 1) Backend (API)
+
+Open a terminal and:
 
 ```bash
 cd cyber-loop-server
-```
-
-### 2. Install Dependencies
-
-```bash
 npm install
-```
-
-### 3. Create .env File
-
-Copy the provided `.env.example` file to `.env` and fill in the values according to your environment.
-
-```bash
-cp .env.example .env
-```
-
-### 4. Seed the Database (optional)
-
-```bash
-npm run db:seed
-npm run db:seed-participants
-```
-
-### 5. Run Tests
-
-```bash
-npm test
-```
-
-### 6. Run the Server
-
-#### Development Mode
-
-```bash
+# copy or create .env based on .env.example and set DB / Supabase keys
+# example: cp .env.example .env
 npm run dev
 ```
 
-#### Production Mode
+Common scripts:
 
-```bash
-npm run build
-npm run start
-```
+- `npm run dev` — run backend in development
+- `npm test` — run server tests
+- `npm run build` / `npm run start` — production build & start
 
-The server should now be available at [http://localhost:3000](http://localhost:3000). If using a different machine, replace `localhost` with the machine's IP: `http://[IP_ADDRESS]:3000`.
-I have exposed the route to 0.0.0.0 which should allow all devices on the same internet to access it.
+Default dev URL: http://localhost:3000
 
-### 7. Health Check
+Health check: `http://localhost:3000/health` → `{ "status": "ok" }`
 
-Visit the health endpoint to ensure the server is running:
+### 2) Frontend (Client)
 
-```
-http://[IP_ADDRESS]:3000/health
-```
-
-Expected Response:
-
-```json
-{"status":"ok"}
-```
-
-### 8. Check Login Status Using Postman
-
-#### Test Login
-
-**Endpoint:** `POST http://[IP_ADDRESS]:3000/api/auth/login`
-
-**Headers:**
-
-```
-Content-Type: application/json
-```
-
-**Body (raw JSON):**
-
-```json
-{
-  "username": "testteam",
-  "password": "password123"
-}
-```
-
-**Expected Response:**
-
-```json
-{
-  "token": "<JWT_TOKEN>"
-}
-```
-
-Copy the JWT token for authenticated requests.
-
-#### Test Logout
-
-**Endpoint:** `POST http://[IP_ADDRESS]:3000/api/auth/logout`
-
-**Headers:**
-
-```
-Authorization: Bearer <JWT_TOKEN>
-```
-
-**Body:** Empty
-
-**Expected Response:**
-
-```json
-{
-  "message": "Logged out successfully"
-}
-```
-
-After logout, the same token will be invalid for any protected routes.
-
----
-
-## Frontend Setup
-
-### 1. Navigate to Frontend Folder
+In a separate terminal:
 
 ```bash
 cd cyber-loop-frontend
-```
-
-### 2. Install Dependencies
-
-```bash
 npm install
-```
-
-### 3. Start the Development Server
-
-```bash
 npm run dev
 ```
 
-The frontend should now be running. You can view the application in your browser, typically at [http://localhost:5173](http://localhost:5173).
+Open the app at http://localhost:5173 (Vite default).
+
+Common scripts:
+
+- `npm run dev` — start frontend dev server
+- `npm run build` — build for production
+- `npm run preview` — preview production build
+
+---
+
+## 🔧 Environment & Notes
+
+- Backend may use SQLite locally and Supabase for production features. Check `cyber-loop-server/src/config/supabase.ts` for Supabase wiring.
+- Ensure environment variables (JWT secret, Supabase keys, DB paths) are set in the backend `.env`.
+- If you need to test auth flows, use the provided test accounts or seed scripts in `cyber-loop-server/data`.
+
+---
+
+## 🧪 Tests
+
+- Backend tests: run `cd cyber-loop-server && npm test`.
+- Frontend: add/extend tests inside `cyber-loop-frontend` as desired (Vite + React testing setup).
+
+---
+
+## 📦 Deployment
+
+- Frontend is configured for Vercel (see `vercel.json`).
+- Backend can be deployed on any Node host; consider using Docker or a serverless platform with a managed database for production.
+
+---
+
+## 🗂 Project Structure (high level)
+
+- `cyber-loop-frontend/` — React app, components in `src/components`, pages in `src/pages`
+- `cyber-loop-server/` — TypeScript Express app, controllers/services under `src/`
+
+---
+
+## 👥 Team
+
+- Hunza Shahzadi — Frontend Developer — https://github.com/hunzashahzadi23
+- Abdul Rahman — Frontend Developer — https://github.com/AbdulRahman10725
+
+
+
