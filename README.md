@@ -1,6 +1,6 @@
 # 🚀 Cyber Loop
 
-[![Vercel](https://img.shields.io/badge/deploy-vercel-000000?logo=vercel)](https://recursion-hell.vercel.app/) [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
+[![Vercel](https://img.shields.io/badge/deploy-vercel-000000?logo=vercel)](https://recursion-hell.vercel.app/)
 
 **Live Demo:** https://recursion-hell.vercel.app/
 
